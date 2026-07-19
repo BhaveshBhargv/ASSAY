@@ -1,0 +1,22 @@
+INFO app.ml.train: fitting GridSearchCV over 36 configs x 5 folds ...
+INFO app.ml.train: best macro-F1 (CV): 0.8681 | params: {'max_depth': 20, 'max_features': 0.5, 'min_samples_leaf': 1, 'n_estimators': 300}
+INFO app.ml.train: saved model -> C:\Users\Bhavesh Bhargava\Mini-projects\blood-test-lifestyle-recommender\src\app\ml\registry\rf_model.joblib
+INFO app.ml.evaluate: test macro-F1=0.8681 accuracy=0.8897 roc_auc=0.9726
+INFO app.ml.explain: top features: hba1c_pct, total_chol_mgdl, fasting_glucose_mgdl, hdl_mgdl, age, age_band, tg_hdl_ratio, tc_hdl_ratio
+loaded: 15446 train / 3862 test, 35 features
+Fitting 5 folds for each of 36 candidates, totalling 180 fits
+
+=== Phase 4 results ===
+CV macro-F1 (best) : 0.8681
+best params        : {'max_depth': 20, 'max_features': 0.5, 'min_samples_leaf': 1, 'n_estimators': 300}
+TEST accuracy      : 0.8897
+TEST macro-F1      : 0.8681
+TEST ROC-AUC (macro): 0.9726
+per-class F1: {'normal': 0.792, 'borderline': 0.901, 'serious': 0.912}
+
+NOVELTY SLICE (n=306): hidden-risk detection = 72.5% | exact acc = 20.3%
+
+top features: hba1c_pct, total_chol_mgdl, fasting_glucose_mgdl, hdl_mgdl, age, age_band, tg_hdl_ratio, tc_hdl_ratio
+
+model -> C:\Users\Bhavesh Bhargava\Mini-projects\blood-test-lifestyle-recommender\src\app\ml\registry\rf_model.joblib
+reports -> C:\Users\Bhavesh Bhargava\Mini-projects\blood-test-lifestyle-recommender\reports\phase4

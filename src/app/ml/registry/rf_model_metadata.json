@@ -1,0 +1,51 @@
+{
+  "model_type": "RandomForestClassifier",
+  "trained_at": "2026-07-18T19:18:54.544147+00:00",
+  "class_weight": "balanced",
+  "scoring": "f1_macro",
+  "cv_splits": 5,
+  "seed": 42,
+  "best_params": {
+    "max_depth": 20,
+    "max_features": 0.5,
+    "min_samples_leaf": 1,
+    "n_estimators": 500
+  },
+  "cv_best_macro_f1": 0.8685177345531147,
+  "label_order": [
+    "normal",
+    "borderline",
+    "serious"
+  ],
+  "n_features": 27,
+  "feature_names": [
+    "age",
+    "hba1c_pct",
+    "fasting_glucose_mgdl",
+    "total_chol_mgdl",
+    "ldl_mgdl",
+    "hdl_mgdl",
+    "triglycerides_mgdl",
+    "hemoglobin",
+    "hematocrit",
+    "rbc",
+    "mcv",
+    "mch",
+    "mchc",
+    "rdw",
+    "alt",
+    "ast",
+    "alp",
+    "albumin",
+    "total_bilirubin",
+    "creatinine",
+    "bun",
+    "tc_hdl_ratio",
+    "tg_hdl_ratio",
+    "tyg_index",
+    "age_band",
+    "sex_1",
+    "sex_2"
+  ],
+  "n_train": 15446
+}

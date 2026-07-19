@@ -1,0 +1,15 @@
+[theme]
+base = "light"
+primaryColor = "#0E7C86"
+backgroundColor = "#EEF2F4"
+secondaryBackgroundColor = "#FFFFFF"
+textColor = "#10202E"
+font = "sans serif"
+
+[client]
+# Hide the automatic multipage nav; navigation is via explicit in-page links so
+# the sidebar stays a clean control rail.
+showSidebarNavigation = false
+
+[server]
+maxUploadSize = 10

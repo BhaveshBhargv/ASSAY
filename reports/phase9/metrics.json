@@ -1,0 +1,72 @@
+{
+  "accuracy": 0.8886587260486795,
+  "macro": {
+    "precision": 0.8593521159528951,
+    "recall": 0.8858309103993366,
+    "f1": 0.8671178838725205
+  },
+  "weighted": {
+    "precision": 0.8988643664934022,
+    "recall": 0.8886587260486795,
+    "f1": 0.8906494804441105
+  },
+  "roc_auc_macro_ovr": 0.9728451935367208,
+  "per_class": {
+    "normal": {
+      "precision": 0.7068965517241379,
+      "recall": 0.8971553610503282,
+      "f1": 0.7907425265188043,
+      "support": 457,
+      "roc_auc_ovr": 0.9813140027697715
+    },
+    "borderline": {
+      "precision": 0.8879590887959089,
+      "recall": 0.9121298949379179,
+      "f1": 0.8998822143698468,
+      "support": 2094,
+      "roc_auc_ovr": 0.9589281160998672
+    },
+    "serious": {
+      "precision": 0.9832007073386384,
+      "recall": 0.8482074752097636,
+      "f1": 0.9107289107289107,
+      "support": 1311,
+      "roc_auc_ovr": 0.9782934617405238
+    }
+  },
+  "confusion_matrix": {
+    "labels": [
+      "normal",
+      "borderline",
+      "serious"
+    ],
+    "counts": [
+      [
+        410,
+        47,
+        0
+      ],
+      [
+        165,
+        1910,
+        19
+      ],
+      [
+        5,
+        194,
+        1112
+      ]
+    ]
+  },
+  "novelty_slice": {
+    "n": 306,
+    "description": "records upgraded by Layer-2 (bloods normal/borderline, diagnosis/medication indicated higher risk)",
+    "risk_detected_rate": 0.7222222222222222,
+    "exact_label_accuracy": 0.18627450980392157,
+    "predicted_class_distribution": {
+      "normal": 85,
+      "borderline": 211,
+      "serious": 10
+    }
+  }
+}

@@ -1,0 +1,44 @@
+# NHANES file registry — Phase 2
+# Handles the three different cycle naming conventions:
+#   2013-2014 -> suffix "_H"   (e.g. DEMO_H.XPT)
+#   2015-2016 -> suffix "_I"   (e.g. DEMO_I.XPT)
+#   2017-2020 -> prefix "P_"   (pre-pandemic combined release, e.g. P_DEMO.XPT)
+#
+# CDC download scheme (post-2024 site migration):
+#   {base_url}/{dir}/DataFiles/{FILE}.XPT
+# where {dir} is the cycle's START YEAR. Pre-pandemic (P_) files live under 2017.
+
+base_url: "https://wwwn.cdc.gov/Nchs/Data/Nhanes/Public"
+
+cycles:
+  - name: "2013-2014"
+    dir: "2013"
+    kind: suffix
+    token: "_H"
+  - name: "2015-2016"
+    dir: "2015"
+    kind: suffix
+    token: "_I"
+  - name: "2017-2020"
+    dir: "2017"
+    kind: prefix
+    token: "P_"
+
+# Component base names common to all cycles (naming convention applied per cycle).
+components:
+  - DEMO      # demographics
+  - GHB       # glycohemoglobin (HbA1c)  -> full sample
+  - TCHOL     # total cholesterol         -> full sample
+  - HDL       # HDL cholesterol           -> full sample
+  - TRIGLY    # triglycerides + LDL       -> fasting subsample (supplementary)
+  - GLU       # fasting glucose           -> fasting subsample (supplementary)
+  - CBC       # complete blood count      -> full sample
+  - BIOPRO    # biochemistry (liver/kidney/electrolytes) -> subsample
+  - VID       # vitamin D                 -> 2013-16 only (absent in P_ cycle; skipped gracefully)
+  - DIQ       # diabetes questionnaire    -> label-only
+  - BPQ       # bp/cholesterol quest.     -> label-only
+  - MCQ       # medical conditions        -> label-only
+  - RXQ_RX    # prescription medications  -> label-only (optional statin/metformin)
+
+# Note: body measures (BMX) and blood pressure (BPX/BPXO) are intentionally NOT
+# pulled — this is a blood-test-report system; BP/BMI/waist are out of scope.

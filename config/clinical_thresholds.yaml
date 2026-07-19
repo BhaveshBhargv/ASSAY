@@ -1,0 +1,154 @@
+# Clinical thresholds & label construction — Phase 2
+# Sources: NICE (NG28 diabetes, NG136 hypertension, CG181 lipids), NHS, WHO, NCEP ATP III.
+# Severity ordinal used throughout: normal < borderline < serious
+# NOTE: thresholds live in config (not code) to satisfy the Open/Closed principle —
+#       add a biomarker or change a cut-off here, no engine edits required.
+
+label_order: [normal, borderline, serious]
+
+# ---------------------------------------------------------------------------
+# LAYER 1 — single-biomarker thresholds (what a GP reads off a report)
+# Each biomarker maps a value -> normal/borderline/serious.
+# 'direction' controls interpretation:
+#   high_is_bad        : value >= serious.min => serious; borderline band otherwise
+#   low_is_bad_sex     : value < sex-specific low => borderline; < serious_below => serious
+#   high_is_bad_sex    : value > sex-specific high => borderline
+# ---------------------------------------------------------------------------
+biomarkers:
+  hba1c_pct:
+    unit: "%"
+    direction: high_is_bad
+    borderline: {min: 5.7, max: 6.4}   # prediabetes (WHO/ADA; NICE 42-47 mmol/mol)
+    serious:    {min: 6.5}             # diabetes range (NICE >=48 mmol/mol)
+    source: "WHO/ADA; NICE NG28"
+
+  fasting_glucose_mgdl:
+    unit: "mg/dL"
+    direction: high_is_bad
+    borderline: {min: 100, max: 125}   # impaired fasting glucose
+    serious:    {min: 126}
+    source: "ADA/WHO IFG"
+
+  total_chol_mgdl:
+    unit: "mg/dL"
+    direction: high_is_bad
+    borderline: {min: 200, max: 239}
+    serious:    {min: 240}
+    source: "NHS; NCEP ATP III"
+
+  hdl_mgdl:
+    unit: "mg/dL"
+    direction: low_is_bad_sex
+    low_threshold: {male: 40, female: 50}   # below => borderline (risk factor)
+    serious_below: 30                        # very low HDL
+    source: "NCEP ATP III / NICE CG181"
+
+  ldl_mgdl:
+    unit: "mg/dL"
+    direction: high_is_bad
+    borderline: {min: 130, max: 159}
+    serious:    {min: 160}
+    source: "NCEP ATP III"
+
+  triglycerides_mgdl:
+    unit: "mg/dL"
+    direction: high_is_bad
+    borderline: {min: 150, max: 199}
+    serious:    {min: 200}
+    source: "NCEP ATP III"
+
+  sbp_mmhg:
+    unit: "mmHg"
+    direction: high_is_bad
+    borderline: {min: 120, max: 139}   # elevated / stage 1
+    serious:    {min: 140}             # NICE stage 2 hypertension
+    source: "NICE NG136"
+
+  dbp_mmhg:
+    unit: "mmHg"
+    direction: high_is_bad
+    borderline: {min: 80, max: 89}
+    serious:    {min: 90}
+    source: "NICE NG136"
+
+  bmi:
+    unit: "kg/m2"
+    direction: high_is_bad
+    borderline: {min: 25, max: 29.9}   # overweight
+    serious:    {min: 30}             # obese
+    underweight_below: 18.5            # flagged as borderline
+    source: "WHO"
+
+  waist_cm:
+    unit: "cm"
+    direction: high_is_bad_sex
+    high_threshold: {male: 102, female: 88}   # above => borderline (central adiposity)
+    source: "IDF / WHO"
+
+# ---------------------------------------------------------------------------
+# Physiological plausibility bounds. Values outside -> set to NaN before
+# imputation (implausible = data error, not a real extreme). Winsorisation
+# at 1st/99th percentile is applied afterwards in the outlier step.
+# ---------------------------------------------------------------------------
+plausibility:
+  hba1c_pct:            {min: 3.0,  max: 20.0}
+  fasting_glucose_mgdl: {min: 30,   max: 800}
+  total_chol_mgdl:      {min: 50,   max: 600}
+  hdl_mgdl:             {min: 5,    max: 200}
+  ldl_mgdl:             {min: 10,   max: 400}
+  triglycerides_mgdl:   {min: 10,   max: 5000}
+  # CBC
+  hemoglobin:           {min: 3,    max: 25}
+  hematocrit:           {min: 10,   max: 70}
+  rbc:                  {min: 1,    max: 9}
+  wbc:                  {min: 0.5,  max: 200}
+  platelets:            {min: 5,    max: 2000}
+  mcv:                  {min: 50,   max: 130}
+  mch:                  {min: 10,   max: 50}
+  mchc:                 {min: 20,   max: 45}
+  rdw:                  {min: 8,    max: 40}
+  # biochemistry — liver / kidney / electrolytes
+  alt:                  {min: 1,    max: 2000}
+  ast:                  {min: 1,    max: 2000}
+  alp:                  {min: 5,    max: 1500}
+  albumin:              {min: 1,    max: 7}
+  total_bilirubin:      {min: 0,    max: 50}
+  creatinine:           {min: 0.1,  max: 20}
+  bun:                  {min: 1,    max: 250}
+  sodium:               {min: 100,  max: 180}
+  potassium:            {min: 1,    max: 10}
+  chloride:             {min: 60,   max: 140}
+  calcium:              {min: 3,    max: 20}
+  # vitamins
+  vitamin_d:            {min: 5,    max: 400}
+
+# ---------------------------------------------------------------------------
+# LAYER 2 — diagnosis & medication proxies for interaction cases
+# (records where NO single biomarker breaches a threshold).
+# Each proxy enforces a MINIMUM severity. These variables are LABEL-ONLY and
+# are excluded from the RF feature matrix to prevent target leakage.
+# NHANES 'yes' coding: 1 = Yes, 2 = No, 3 = Borderline (DIQ010), 7/9 = refused/DK.
+# ---------------------------------------------------------------------------
+diagnosis_proxies:
+  diabetes_diagnosis:                     # DIQ010 == 1
+    min_severity: borderline
+  diabetes_borderline:                    # DIQ010 == 3
+    min_severity: borderline
+  diabetes_medication:                    # DIQ050 (insulin) or DIQ070 (pills) == 1
+    min_severity: borderline
+  high_cholesterol_diagnosis:             # BPQ080 == 1
+    min_severity: borderline
+  cholesterol_medication:                 # BPQ090D == 1
+    min_severity: borderline
+  hypertension_medicated:                 # BPQ020 == 1 AND BPQ040A == 1
+    min_severity: borderline
+  cvd_diagnosis:                          # MCQ160C/E/F == 1 (CHD, MI, stroke)
+    min_severity: serious
+  statin_or_metformin:                    # RXQ_RX drug name match (optional)
+    min_severity: borderline
+
+# Mapping of the 3-class label to the Phase 1 severity taxonomy.
+label_to_severity:
+  normal: low
+  borderline: moderate
+  serious: high

@@ -1,0 +1,36 @@
+# Blood-test lifestyle recommender — Python dependencies (Python 3.11–3.13).
+# In Docker, install a CPU-only torch first (see Dockerfile) to keep the image small.
+
+# --- data & ML -------------------------------------------------------------
+pandas>=2.0
+numpy>=1.24
+scikit-learn>=1.3
+joblib>=1.3
+shap>=0.44
+matplotlib>=3.7
+PyYAML>=6.0
+requests>=2.31
+
+# --- RAG (retrieval) -------------------------------------------------------
+sentence-transformers>=2.2
+faiss-cpu>=1.7
+pypdf>=3.0
+
+# --- LLM recommendation engine (LangChain, behind a port) ------------------
+pydantic>=2.5
+langchain>=0.2
+langchain-core>=0.2
+langchain-ollama>=0.1        # local provider
+langchain-anthropic>=0.1     # hosted Anthropic
+langchain-openai>=0.1        # OpenRouter (OpenAI-compatible) + OpenAI
+python-dotenv>=1.0           # load API keys from a .env file
+
+# --- API (FastAPI) ---------------------------------------------------------
+fastapi>=0.110
+uvicorn>=0.27
+python-multipart>=0.0.9
+
+# --- dashboard (Streamlit) -------------------------------------------------
+streamlit>=1.30
+plotly>=5.18
+fpdf2>=2.7

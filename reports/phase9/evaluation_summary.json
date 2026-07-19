@@ -1,0 +1,179 @@
+{
+  "ml": {
+    "n_test": 3862,
+    "n_features": 27,
+    "headline": {
+      "accuracy": 0.8886587260486795,
+      "precision_macro": 0.8593521159528951,
+      "recall_macro": 0.8858309103993366,
+      "f1_macro": 0.8671178838725205,
+      "roc_auc_macro_ovr": 0.9728451935367208
+    },
+    "per_class": {
+      "normal": {
+        "precision": 0.7068965517241379,
+        "recall": 0.8971553610503282,
+        "f1": 0.7907425265188043,
+        "support": 457
+      },
+      "borderline": {
+        "precision": 0.8879590887959089,
+        "recall": 0.9121298949379179,
+        "f1": 0.8998822143698468,
+        "support": 2094
+      },
+      "serious": {
+        "precision": 0.9832007073386384,
+        "recall": 0.8482074752097636,
+        "f1": 0.9107289107289107,
+        "support": 1311
+      }
+    },
+    "confusion_matrix": {
+      "labels": [
+        "normal",
+        "borderline",
+        "serious"
+      ],
+      "counts": [
+        [
+          410,
+          47,
+          0
+        ],
+        [
+          165,
+          1910,
+          19
+        ],
+        [
+          5,
+          194,
+          1112
+        ]
+      ]
+    },
+    "novelty_slice": {
+      "n": 306,
+      "description": "records upgraded by Layer-2 (bloods normal/borderline, diagnosis/medication indicated higher risk)",
+      "risk_detected_rate": 0.7222222222222222,
+      "exact_label_accuracy": 0.18627450980392157,
+      "predicted_class_distribution": {
+        "normal": 85,
+        "borderline": 211,
+        "serious": 10
+      }
+    },
+    "top_features": [
+      "hba1c_pct",
+      "total_chol_mgdl",
+      "fasting_glucose_mgdl",
+      "age",
+      "hdl_mgdl",
+      "tg_hdl_ratio",
+      "tc_hdl_ratio",
+      "age_band",
+      "ldl_mgdl",
+      "mch"
+    ]
+  },
+  "rag": {
+    "aggregate": {
+      "n_queries": 7,
+      "precision@1": 0.8571428571428571,
+      "recall@1": 0.23717948717948717,
+      "precision@3": 0.6666666666666667,
+      "recall@3": 0.4377289377289377,
+      "precision@5": 0.5428571428571429,
+      "recall@5": 0.5737179487179488,
+      "context_relevance_score": 0.5193881796087537,
+      "context_tag_overlap": 0.5428571428571429
+    },
+    "per_query": [
+      {
+        "name": "Diabetes / raised HbA1c",
+        "total_relevant": 8,
+        "P@1": 1.0,
+        "R@1": 0.125,
+        "P@3": 1.0,
+        "R@3": 0.375,
+        "P@5": 1.0,
+        "R@5": 0.625,
+        "context_score": 0.6076485633850097,
+        "tag_overlap": 1.0
+      },
+      {
+        "name": "Dyslipidaemia",
+        "total_relevant": 8,
+        "P@1": 1.0,
+        "R@1": 0.125,
+        "P@3": 1.0,
+        "R@3": 0.375,
+        "P@5": 0.8,
+        "R@5": 0.5,
+        "context_score": 0.5905398511886597,
+        "tag_overlap": 0.8
+      },
+      {
+        "name": "Fatty liver / raised ALT",
+        "total_relevant": 4,
+        "P@1": 0.0,
+        "R@1": 0.0,
+        "P@3": 0.3333333333333333,
+        "R@3": 0.25,
+        "P@5": 0.2,
+        "R@5": 0.25,
+        "context_score": 0.44570795655250545,
+        "tag_overlap": 0.2
+      },
+      {
+        "name": "Reduced kidney function",
+        "total_relevant": 2,
+        "P@1": 1.0,
+        "R@1": 0.5,
+        "P@3": 0.3333333333333333,
+        "R@3": 0.5,
+        "P@5": 0.4,
+        "R@5": 1.0,
+        "context_score": 0.4561037492752075,
+        "tag_overlap": 0.4
+      },
+      {
+        "name": "Anaemia",
+        "total_relevant": 3,
+        "P@1": 1.0,
+        "R@1": 0.3333333333333333,
+        "P@3": 0.3333333333333333,
+        "R@3": 0.3333333333333333,
+        "P@5": 0.2,
+        "R@5": 0.3333333333333333,
+        "context_score": 0.47543316245079037,
+        "tag_overlap": 0.2
+      },
+      {
+        "name": "Vitamin D deficiency",
+        "total_relevant": 2,
+        "P@1": 1.0,
+        "R@1": 0.5,
+        "P@3": 0.6666666666666666,
+        "R@3": 1.0,
+        "P@5": 0.4,
+        "R@5": 1.0,
+        "context_score": 0.5042568337917328,
+        "tag_overlap": 0.4
+      },
+      {
+        "name": "Metabolic cluster",
+        "total_relevant": 13,
+        "P@1": 1.0,
+        "R@1": 0.07692307692307693,
+        "P@3": 1.0,
+        "R@3": 0.23076923076923078,
+        "P@5": 0.8,
+        "R@5": 0.3076923076923077,
+        "context_score": 0.5560271406173707,
+        "tag_overlap": 0.8
+      }
+    ]
+  }
+}

@@ -1,0 +1,22 @@
+# Keep the image lean — the trained model + RAG index (under src/) are kept;
+# raw/processed data and reports are only needed for retraining/eval.
+.git
+.gitignore
+.github
+.env
+.venv
+venv
+__pycache__
+*.pyc
+.pytest_cache
+.mypy_cache
+.ruff_cache
+data/raw
+data/interim
+data/processed
+data/*.log
+reports
+docs
+*.md
+!README.md
+.streamlit/secrets.toml

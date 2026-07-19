@@ -1,0 +1,611 @@
+{
+  "model": "all-MiniLM-L6-v2",
+  "chunks": [
+    {
+      "chunk_id": "nice-ph38-prediabetes-diet",
+      "text": "For raised blood glucose in the pre-diabetes range, reduce intake of refined carbohydrates and sugary foods and drinks, and choose wholegrains, pulses, vegetables and other high-fibre foods. Cutting back on sugar-sweetened beverages is a simple, high-impact change.",
+      "source": "NICE",
+      "code": "PH38",
+      "title": "Diet for raised blood glucose / pre-diabetes",
+      "biomarkers": [
+        "hba1c_pct",
+        "fasting_glucose_mgdl"
+      ],
+      "categories": [
+        "diet"
+      ],
+      "severities": [
+        "borderline"
+      ],
+      "url": ""
+    },
+    {
+      "chunk_id": "nice-ph38-prediabetes-activity-weight",
+      "text": "People with pre-diabetes can substantially lower their risk of progressing to type 2 diabetes through at least 150 minutes of moderate physical activity per week and, if overweight, a gradual 5-10% reduction in body weight.",
+      "source": "NICE",
+      "code": "PH38",
+      "title": "Weight and activity for pre-diabetes",
+      "biomarkers": [
+        "hba1c_pct",
+        "fasting_glucose_mgdl"
+      ],
+      "categories": [
+        "physical_activity",
+        "weight"
+      ],
+      "severities": [
+        "borderline"
+      ],
+      "url": ""
+    },
+    {
+      "chunk_id": "nice-ng28-diabetes-range",
+      "text": "When HbA1c is in the diabetes range, alongside dietary change and regular activity the person should be reviewed by their GP for structured education and a personalised management plan. Lifestyle change remains first-line.",
+      "source": "NICE",
+      "code": "NG28",
+      "title": "Diabetes-range HbA1c management",
+      "biomarkers": [
+        "hba1c_pct",
+        "fasting_glucose_mgdl"
+      ],
+      "categories": [
+        "diet",
+        "physical_activity",
+        "followup"
+      ],
+      "severities": [
+        "serious"
+      ],
+      "url": ""
+    },
+    {
+      "chunk_id": "who-free-sugars",
+      "text": "WHO recommends keeping free sugars below 10% of total energy intake, and ideally below 5%, to reduce the risk of weight gain, raised blood glucose and dental disease. Sugar-sweetened drinks are the largest avoidable source.",
+      "source": "WHO",
+      "code": "Sugars",
+      "title": "Limit free sugars",
+      "biomarkers": [
+        "hba1c_pct",
+        "fasting_glucose_mgdl",
+        "triglycerides_mgdl"
+      ],
+      "categories": [
+        "diet"
+      ],
+      "severities": [
+        "all"
+      ],
+      "url": ""
+    },
+    {
+      "chunk_id": "nice-cg181-cholesterol-diet",
+      "text": "To lower raised cholesterol, reduce saturated fat (fatty and processed meats, butter, cheese, pastries) and replace it with unsaturated fats such as olive and rapeseed oil, nuts and seeds. Increase soluble fibre from oats, beans and lentils, and include oily fish.",
+      "source": "NICE",
+      "code": "CG181",
+      "title": "Diet for raised cholesterol",
+      "biomarkers": [
+        "total_chol_mgdl",
+        "ldl_mgdl"
+      ],
+      "categories": [
+        "diet"
+      ],
+      "severities": [
+        "borderline",
+        "serious"
+      ],
+      "url": ""
+    },
+    {
+      "chunk_id": "nice-cg181-ldl-high",
+      "text": "Markedly high LDL cholesterol warrants both dietary change - cutting saturated fat and adding soluble fibre and plant stanols/sterols - and a GP review to assess overall cardiovascular risk, since very high levels can be inherited.",
+      "source": "NICE",
+      "code": "CG181",
+      "title": "High LDL cholesterol",
+      "biomarkers": [
+        "ldl_mgdl",
+        "total_chol_mgdl"
+      ],
+      "categories": [
+        "diet",
+        "followup"
+      ],
+      "severities": [
+        "serious"
+      ],
+      "url": ""
+    },
+    {
+      "chunk_id": "nhs-hdl-low",
+      "text": "HDL (\"good\") cholesterol can be improved with regular physical activity, stopping smoking, and replacing saturated and trans fats with unsaturated fats such as olive oil, oily fish and nuts.",
+      "source": "NHS",
+      "code": "Cholesterol",
+      "title": "Raising low HDL cholesterol",
+      "biomarkers": [
+        "hdl_mgdl"
+      ],
+      "categories": [
+        "physical_activity",
+        "smoking",
+        "diet"
+      ],
+      "severities": [
+        "borderline"
+      ],
+      "url": ""
+    },
+    {
+      "chunk_id": "nhs-triglycerides-high",
+      "text": "High triglycerides respond well to lifestyle change: cut down on sugar, refined carbohydrates and alcohol, lose excess weight, stay physically active, and eat oily fish. Alcohol in particular can raise triglycerides substantially.",
+      "source": "NHS",
+      "code": "Triglycerides",
+      "title": "Lowering high triglycerides",
+      "biomarkers": [
+        "triglycerides_mgdl"
+      ],
+      "categories": [
+        "diet",
+        "alcohol",
+        "weight",
+        "physical_activity"
+      ],
+      "severities": [
+        "borderline",
+        "serious"
+      ],
+      "url": ""
+    },
+    {
+      "chunk_id": "nhs-oily-fish",
+      "text": "Aim for two portions of fish per week, at least one of them oily - such as salmon, mackerel, sardines or trout - which provide omega-3 fatty acids that support heart and circulatory health.",
+      "source": "NHS",
+      "code": "Eatwell",
+      "title": "Oily fish for heart health",
+      "biomarkers": [
+        "triglycerides_mgdl",
+        "total_chol_mgdl",
+        "hdl_mgdl"
+      ],
+      "categories": [
+        "diet"
+      ],
+      "severities": [
+        "all"
+      ],
+      "url": ""
+    },
+    {
+      "chunk_id": "nice-ng49-nafld",
+      "text": "Mildly raised liver enzymes are often linked to non-alcoholic fatty liver disease. Gradual weight loss if overweight, reducing sugar and saturated fat, and regular physical activity can lower liver fat and improve enzyme levels.",
+      "source": "NICE",
+      "code": "NG49",
+      "title": "Raised liver enzymes / fatty liver",
+      "biomarkers": [
+        "alt",
+        "ast"
+      ],
+      "categories": [
+        "weight",
+        "diet",
+        "physical_activity"
+      ],
+      "severities": [
+        "borderline",
+        "serious"
+      ],
+      "url": ""
+    },
+    {
+      "chunk_id": "nhs-alcohol-liver",
+      "text": "Keep alcohol within 14 units per week, spread over three or more days with several drink-free days. If liver markers are raised, reducing alcohol further - or stopping - gives the liver the best chance to recover.",
+      "source": "NHS",
+      "code": "Alcohol",
+      "title": "Alcohol and liver health",
+      "biomarkers": [
+        "alt",
+        "ast",
+        "alp",
+        "total_bilirubin"
+      ],
+      "categories": [
+        "alcohol"
+      ],
+      "severities": [
+        "borderline",
+        "serious"
+      ],
+      "url": ""
+    },
+    {
+      "chunk_id": "nhs-albumin-nutrition",
+      "text": "A low albumin level can reflect inadequate nutrition. Ensure a balanced diet with sufficient protein (lean meat, fish, eggs, dairy, beans and pulses), and discuss persistently low levels with a clinician.",
+      "source": "NHS",
+      "code": "Nutrition",
+      "title": "Low albumin and nutrition",
+      "biomarkers": [
+        "albumin"
+      ],
+      "categories": [
+        "diet",
+        "followup"
+      ],
+      "severities": [
+        "borderline"
+      ],
+      "url": ""
+    },
+    {
+      "chunk_id": "nice-ng203-kidney",
+      "text": "To protect kidney function, keep blood pressure and blood glucose well controlled, reduce salt to under 6g per day, stay well hydrated, and avoid excessive protein intake and regular use of anti-inflammatory painkillers. Raised creatinine should be reviewed by a GP.",
+      "source": "NICE",
+      "code": "NG203",
+      "title": "Protecting kidney function",
+      "biomarkers": [
+        "creatinine",
+        "bun"
+      ],
+      "categories": [
+        "diet",
+        "hydration",
+        "followup"
+      ],
+      "severities": [
+        "borderline",
+        "serious"
+      ],
+      "url": ""
+    },
+    {
+      "chunk_id": "who-salt-reduction",
+      "text": "WHO recommends less than 5g of salt per day. Check food labels, cook with herbs and spices instead of salt, and limit processed and takeaway foods, which are the main sources of dietary sodium.",
+      "source": "WHO",
+      "code": "Salt",
+      "title": "Reduce dietary salt",
+      "biomarkers": [
+        "creatinine",
+        "bun"
+      ],
+      "categories": [
+        "diet"
+      ],
+      "severities": [
+        "all"
+      ],
+      "url": ""
+    },
+    {
+      "chunk_id": "nhs-iron-deficiency",
+      "text": "Low haemoglobin with small red cells suggests iron deficiency. Eat more iron-rich foods such as lean red meat, beans, lentils, tofu, dark-green leafy vegetables and fortified cereals. A GP may recommend iron supplements.",
+      "source": "NHS",
+      "code": "Anaemia",
+      "title": "Iron-deficiency anaemia diet",
+      "biomarkers": [
+        "hemoglobin",
+        "hematocrit",
+        "rbc",
+        "mcv",
+        "mch",
+        "mchc"
+      ],
+      "categories": [
+        "diet",
+        "supplementation"
+      ],
+      "severities": [
+        "borderline",
+        "serious"
+      ],
+      "url": ""
+    },
+    {
+      "chunk_id": "nhs-iron-absorption",
+      "text": "Vitamin C helps the body absorb iron, so pair iron-rich foods with fruit or vegetables. Tea and coffee taken with meals reduce iron absorption, so it helps to have them between meals instead.",
+      "source": "NHS",
+      "code": "Anaemia",
+      "title": "Improving iron absorption",
+      "biomarkers": [
+        "hemoglobin",
+        "mcv",
+        "rdw"
+      ],
+      "categories": [
+        "diet"
+      ],
+      "severities": [
+        "borderline"
+      ],
+      "url": ""
+    },
+    {
+      "chunk_id": "nhs-macrocytic-b12-folate",
+      "text": "Large red cells can indicate vitamin B12 or folate deficiency. Include B12 sources (meat, fish, eggs, dairy, fortified foods) and folate sources (leafy greens, legumes, fortified cereals), and ask a GP whether testing or supplements are needed.",
+      "source": "NHS",
+      "code": "Anaemia",
+      "title": "B12 and folate for macrocytic anaemia",
+      "biomarkers": [
+        "mcv",
+        "mch",
+        "hemoglobin"
+      ],
+      "categories": [
+        "diet",
+        "supplementation",
+        "followup"
+      ],
+      "severities": [
+        "borderline"
+      ],
+      "url": ""
+    },
+    {
+      "chunk_id": "nhs-rdw-nutrition",
+      "text": "A raised red-cell distribution width can be an early sign of iron, B12 or folate deficiency before anaemia develops. Reviewing the diet for these nutrients is a sensible first step.",
+      "source": "NHS",
+      "code": "Anaemia",
+      "title": "Raised RDW",
+      "biomarkers": [
+        "rdw"
+      ],
+      "categories": [
+        "diet"
+      ],
+      "severities": [
+        "borderline"
+      ],
+      "url": ""
+    },
+    {
+      "chunk_id": "nhs-vitamin-d-deficiency",
+      "text": "For low vitamin D, a daily supplement of 10 micrograms is advised, particularly in autumn and winter. Safe sun exposure in summer and dietary sources such as oily fish, eggs and fortified foods also help maintain healthy levels.",
+      "source": "NHS",
+      "code": "Vitamin D",
+      "title": "Correcting vitamin D deficiency",
+      "biomarkers": [
+        "vitamin_d"
+      ],
+      "categories": [
+        "supplementation",
+        "diet"
+      ],
+      "severities": [
+        "borderline"
+      ],
+      "url": ""
+    },
+    {
+      "chunk_id": "nhs-vitamin-d-general",
+      "text": "Because sunlight is the main source of vitamin D, everyone in the UK is advised to consider a daily 10 microgram supplement during autumn and winter when sunlight is limited.",
+      "source": "NHS",
+      "code": "Vitamin D",
+      "title": "Vitamin D in autumn and winter",
+      "biomarkers": [
+        "vitamin_d"
+      ],
+      "categories": [
+        "supplementation"
+      ],
+      "severities": [
+        "all"
+      ],
+      "url": ""
+    },
+    {
+      "chunk_id": "nhs-physical-activity",
+      "text": "Adults should aim for at least 150 minutes of moderate activity (such as brisk walking or cycling) or 75 minutes of vigorous activity each week, plus muscle-strengthening activities on two days.",
+      "source": "NHS",
+      "code": "Activity",
+      "title": "Physical activity guideline",
+      "biomarkers": [],
+      "categories": [
+        "physical_activity"
+      ],
+      "severities": [
+        "all"
+      ],
+      "url": ""
+    },
+    {
+      "chunk_id": "nhs-eatwell",
+      "text": "A balanced diet based on the Eatwell Guide includes at least five portions of fruit and vegetables a day, higher-fibre wholegrain carbohydrates, some lean protein and dairy or alternatives, and limited saturated fat, salt and sugar.",
+      "source": "NHS",
+      "code": "Eatwell",
+      "title": "Balanced diet",
+      "biomarkers": [],
+      "categories": [
+        "diet"
+      ],
+      "severities": [
+        "all"
+      ],
+      "url": ""
+    },
+    {
+      "chunk_id": "nhs-smoking-cessation",
+      "text": "Stopping smoking is one of the most effective steps for cardiovascular and overall health, improving cholesterol profile and circulation. Free NHS Stop Smoking support and nicotine replacement can greatly increase success.",
+      "source": "NHS",
+      "code": "Smoking",
+      "title": "Stopping smoking",
+      "biomarkers": [
+        "hdl_mgdl"
+      ],
+      "categories": [
+        "smoking"
+      ],
+      "severities": [
+        "all"
+      ],
+      "url": ""
+    },
+    {
+      "chunk_id": "nhs-alcohol-limits",
+      "text": "To keep health risks low, drink no more than 14 units of alcohol per week, spread evenly over three or more days, with several drink-free days each week.",
+      "source": "NHS",
+      "code": "Alcohol",
+      "title": "Alcohol unit guideline",
+      "biomarkers": [
+        "triglycerides_mgdl",
+        "alt",
+        "ast"
+      ],
+      "categories": [
+        "alcohol"
+      ],
+      "severities": [
+        "all"
+      ],
+      "url": ""
+    },
+    {
+      "chunk_id": "nhs-weight-management",
+      "text": "Losing even 5-10% of body weight, if overweight, meaningfully improves blood glucose, cholesterol, triglycerides and liver markers. Gradual, sustained change through diet and activity works best.",
+      "source": "NHS",
+      "code": "Weight",
+      "title": "Weight management benefits",
+      "biomarkers": [
+        "hba1c_pct",
+        "triglycerides_mgdl",
+        "alt"
+      ],
+      "categories": [
+        "weight"
+      ],
+      "severities": [
+        "borderline",
+        "serious"
+      ],
+      "url": ""
+    },
+    {
+      "chunk_id": "nhs-fibre",
+      "text": "Aim for around 30g of fibre a day from wholegrains, pulses, fruit and vegetables. Fibre helps lower cholesterol, steadies blood glucose and supports a healthy weight.",
+      "source": "NHS",
+      "code": "Eatwell",
+      "title": "Dietary fibre",
+      "biomarkers": [
+        "total_chol_mgdl",
+        "ldl_mgdl",
+        "hba1c_pct"
+      ],
+      "categories": [
+        "diet"
+      ],
+      "severities": [
+        "all"
+      ],
+      "url": ""
+    },
+    {
+      "chunk_id": "nhs-sleep",
+      "text": "Most adults need 7-9 hours of good-quality sleep. Persistent poor sleep is linked to weight gain, raised blood glucose and higher cardiovascular risk, so a regular sleep routine supports metabolic health.",
+      "source": "NHS",
+      "code": "Sleep",
+      "title": "Sleep and metabolic health",
+      "biomarkers": [],
+      "categories": [
+        "sleep"
+      ],
+      "severities": [
+        "all"
+      ],
+      "url": ""
+    },
+    {
+      "chunk_id": "nice-cg181-cvd-risk",
+      "text": "When several cardiometabolic markers are raised together, the priority is overall cardiovascular risk reduction - improving diet, increasing activity, stopping smoking and managing weight in combination - rather than treating any single result in isolation.",
+      "source": "NICE",
+      "code": "CG181",
+      "title": "Overall cardiovascular risk",
+      "biomarkers": [
+        "total_chol_mgdl",
+        "hdl_mgdl",
+        "hba1c_pct",
+        "triglycerides_mgdl"
+      ],
+      "categories": [
+        "diet",
+        "physical_activity",
+        "smoking",
+        "weight"
+      ],
+      "severities": [
+        "serious"
+      ],
+      "url": ""
+    },
+    {
+      "chunk_id": "metabolic-cluster",
+      "text": "The combination of raised glucose, high triglycerides and low HDL signals a metabolic risk pattern. Weight loss, more physical activity and cutting refined carbohydrates, sugar and alcohol address all of these together.",
+      "source": "NICE",
+      "code": "PH38",
+      "title": "Metabolic risk cluster",
+      "biomarkers": [
+        "hba1c_pct",
+        "triglycerides_mgdl",
+        "hdl_mgdl",
+        "fasting_glucose_mgdl"
+      ],
+      "categories": [
+        "diet",
+        "physical_activity",
+        "weight",
+        "alcohol"
+      ],
+      "severities": [
+        "serious"
+      ],
+      "url": ""
+    },
+    {
+      "chunk_id": "flag-only-signpost",
+      "text": "Abnormal electrolytes (sodium, potassium, chloride, calcium) or white-cell and platelet counts are generally not driven by lifestyle and can indicate a medical condition or medication effect. These should be reviewed promptly by a GP rather than addressed through diet or exercise.",
+      "source": "NHS",
+      "code": "Blood tests",
+      "title": "Non-lifestyle abnormal results",
+      "biomarkers": [
+        "sodium",
+        "potassium",
+        "chloride",
+        "calcium",
+        "wbc",
+        "platelets"
+      ],
+      "categories": [
+        "followup"
+      ],
+      "severities": [
+        "all"
+      ],
+      "url": ""
+    },
+    {
+      "chunk_id": "urgent-referral",
+      "text": "Markedly abnormal blood results need prompt assessment by a healthcare professional. This tool provides lifestyle guidance only and does not replace medical diagnosis or treatment.",
+      "source": "NHS",
+      "code": "Urgent care",
+      "title": "Markedly abnormal results",
+      "biomarkers": [],
+      "categories": [
+        "followup"
+      ],
+      "severities": [
+        "serious"
+      ],
+      "url": ""
+    },
+    {
+      "chunk_id": "general-followup",
+      "text": "These recommendations are evidence-based lifestyle guidance, not a diagnosis. Discuss your full results and any personal or family history with your GP, who can interpret them in your overall clinical context.",
+      "source": "NHS",
+      "code": "Blood tests",
+      "title": "Discuss results with your GP",
+      "biomarkers": [],
+      "categories": [
+        "followup"
+      ],
+      "severities": [
+        "all"
+      ],
+      "url": ""
+    }
+  ]
+}

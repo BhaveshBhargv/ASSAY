@@ -1,0 +1,64 @@
+INFO data_prep.download: skip (valid, exists): DEMO_H.XPT
+INFO data_prep.download: skip (valid, exists): GHB_H.XPT
+INFO data_prep.download: skip (valid, exists): TCHOL_H.XPT
+INFO data_prep.download: skip (valid, exists): HDL_H.XPT
+INFO data_prep.download: skip (valid, exists): TRIGLY_H.XPT
+INFO data_prep.download: skip (valid, exists): GLU_H.XPT
+INFO data_prep.download: downloaded: CBC_H.XPT
+INFO data_prep.download: downloaded: BIOPRO_H.XPT
+INFO data_prep.download: downloaded: VID_H.XPT
+INFO data_prep.download: skip (valid, exists): BMX_H.XPT
+INFO data_prep.download: skip (valid, exists): DIQ_H.XPT
+INFO data_prep.download: skip (valid, exists): BPQ_H.XPT
+INFO data_prep.download: skip (valid, exists): MCQ_H.XPT
+INFO data_prep.download: skip (valid, exists): RXQ_RX_H.XPT
+INFO data_prep.download: skip (valid, exists): BPX_H.XPT
+INFO data_prep.download: cycle 2013-2014: 15/15 files
+INFO data_prep.download: skip (valid, exists): DEMO_I.XPT
+INFO data_prep.download: skip (valid, exists): GHB_I.XPT
+INFO data_prep.download: skip (valid, exists): TCHOL_I.XPT
+INFO data_prep.download: skip (valid, exists): HDL_I.XPT
+INFO data_prep.download: skip (valid, exists): TRIGLY_I.XPT
+INFO data_prep.download: skip (valid, exists): GLU_I.XPT
+INFO data_prep.download: downloaded: CBC_I.XPT
+INFO data_prep.download: downloaded: BIOPRO_I.XPT
+INFO data_prep.download: downloaded: VID_I.XPT
+INFO data_prep.download: skip (valid, exists): BMX_I.XPT
+INFO data_prep.download: skip (valid, exists): DIQ_I.XPT
+INFO data_prep.download: skip (valid, exists): BPQ_I.XPT
+INFO data_prep.download: skip (valid, exists): MCQ_I.XPT
+INFO data_prep.download: skip (valid, exists): RXQ_RX_I.XPT
+INFO data_prep.download: skip (valid, exists): BPX_I.XPT
+INFO data_prep.download: cycle 2015-2016: 15/15 files
+INFO data_prep.download: skip (valid, exists): P_DEMO.XPT
+INFO data_prep.download: skip (valid, exists): P_GHB.XPT
+INFO data_prep.download: skip (valid, exists): P_TCHOL.XPT
+INFO data_prep.download: skip (valid, exists): P_HDL.XPT
+INFO data_prep.download: skip (valid, exists): P_TRIGLY.XPT
+INFO data_prep.download: skip (valid, exists): P_GLU.XPT
+INFO data_prep.download: downloaded: P_CBC.XPT
+INFO data_prep.download: downloaded: P_BIOPRO.XPT
+WARNING data_prep.download: unavailable (404): https://wwwn.cdc.gov/Nchs/Data/Nhanes/Public/2017/DataFiles/P_VID.XPT
+INFO data_prep.download: skip (valid, exists): P_BMX.XPT
+INFO data_prep.download: skip (valid, exists): P_DIQ.XPT
+INFO data_prep.download: skip (valid, exists): P_BPQ.XPT
+INFO data_prep.download: skip (valid, exists): P_MCQ.XPT
+INFO data_prep.download: skip (valid, exists): P_RXQ_RX.XPT
+INFO data_prep.download: skip (valid, exists): P_BPXO.XPT
+INFO data_prep.download: cycle 2017-2020: 14/15 files
+INFO data_prep.merge: cycle 2013-2014 merged: 10175 rows, 56 cols
+INFO data_prep.merge: cycle 2015-2016 merged: 9971 rows, 56 cols
+WARNING data_prep.merge: cycle 2017-2020: component VID absent
+INFO data_prep.merge: cycle 2017-2020 merged: 15560 rows, 55 cols
+INFO data_prep.merge: combined: 35706 rows, 56 cols
+INFO data_prep.pipeline: adult filter (age >= 18): 35706 -> 21798 rows
+INFO data_prep.pipeline: label report: {'label_distribution': {'serious': 12898, 'borderline': 7865, 'normal': 1035}, 'layer1_distribution': {'serious': 12296, 'borderline': 7826, 'normal': 1676}, 'upgraded_by_layer2': 1093, 'upgraded_share': 0.0501}
+INFO data_prep.missing: dropped 2490 rows missing mandatory biomarkers (21798 -> 19308)
+INFO data_prep.pipeline: Phase 2 complete: 15446 train / 3862 test rows, 41 features
+
+=== Phase 2 summary ===
+train rows : 15446
+test rows  : 3862
+features   : 41
+labels     : {'serious': 12898, 'borderline': 7865, 'normal': 1035}
+L2 upgrades: 1093 (5.0% — the novelty slice)

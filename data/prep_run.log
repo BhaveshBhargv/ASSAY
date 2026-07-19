@@ -1,0 +1,53 @@
+INFO data_prep.download: downloaded: DEMO_H.XPT
+INFO data_prep.download: downloaded: GHB_H.XPT
+INFO data_prep.download: downloaded: TCHOL_H.XPT
+INFO data_prep.download: downloaded: HDL_H.XPT
+INFO data_prep.download: downloaded: TRIGLY_H.XPT
+INFO data_prep.download: downloaded: GLU_H.XPT
+INFO data_prep.download: downloaded: BMX_H.XPT
+INFO data_prep.download: downloaded: DIQ_H.XPT
+INFO data_prep.download: downloaded: BPQ_H.XPT
+INFO data_prep.download: downloaded: MCQ_H.XPT
+INFO data_prep.download: downloaded: RXQ_RX_H.XPT
+INFO data_prep.download: downloaded: BPX_H.XPT
+INFO data_prep.download: cycle 2013-2014: 12/12 files
+INFO data_prep.download: downloaded: DEMO_I.XPT
+INFO data_prep.download: downloaded: GHB_I.XPT
+INFO data_prep.download: downloaded: TCHOL_I.XPT
+INFO data_prep.download: downloaded: HDL_I.XPT
+INFO data_prep.download: downloaded: TRIGLY_I.XPT
+INFO data_prep.download: downloaded: GLU_I.XPT
+INFO data_prep.download: downloaded: BMX_I.XPT
+INFO data_prep.download: downloaded: DIQ_I.XPT
+INFO data_prep.download: downloaded: BPQ_I.XPT
+INFO data_prep.download: downloaded: MCQ_I.XPT
+INFO data_prep.download: downloaded: RXQ_RX_I.XPT
+INFO data_prep.download: downloaded: BPX_I.XPT
+INFO data_prep.download: cycle 2015-2016: 12/12 files
+INFO data_prep.download: downloaded: P_DEMO.XPT
+INFO data_prep.download: downloaded: P_GHB.XPT
+INFO data_prep.download: downloaded: P_TCHOL.XPT
+INFO data_prep.download: downloaded: P_HDL.XPT
+INFO data_prep.download: downloaded: P_TRIGLY.XPT
+INFO data_prep.download: downloaded: P_GLU.XPT
+INFO data_prep.download: downloaded: P_BMX.XPT
+INFO data_prep.download: downloaded: P_DIQ.XPT
+INFO data_prep.download: downloaded: P_BPQ.XPT
+INFO data_prep.download: downloaded: P_MCQ.XPT
+INFO data_prep.download: downloaded: P_RXQ_RX.XPT
+INFO data_prep.download: downloaded: P_BPXO.XPT
+INFO data_prep.download: cycle 2017-2020: 12/12 files
+INFO data_prep.merge: cycle 2013-2014 merged: 10175 rows, 35 cols
+INFO data_prep.merge: cycle 2015-2016 merged: 9971 rows, 35 cols
+INFO data_prep.merge: cycle 2017-2020 merged: 15560 rows, 35 cols
+INFO data_prep.merge: combined: 35706 rows, 35 cols
+INFO data_prep.pipeline: label report: {'label_distribution': {'borderline': 14605, 'serious': 13534, 'normal': 7567}, 'layer1_distribution': {'borderline': 14385, 'serious': 12909, 'normal': 8412}, 'upgraded_by_layer2': 1286, 'upgraded_share': 0.036}
+INFO data_prep.missing: dropped 15577 rows missing mandatory biomarkers (35706 -> 20129)
+INFO data_prep.pipeline: Phase 2 complete: 16103 train / 4026 test rows, 27 features
+
+=== Phase 2 summary ===
+train rows : 16103
+test rows  : 4026
+features   : 27
+labels     : {'borderline': 14605, 'serious': 13534, 'normal': 7567}
+L2 upgrades: 1286 (3.6% — the novelty slice)

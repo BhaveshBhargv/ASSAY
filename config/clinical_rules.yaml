@@ -1,0 +1,606 @@
+# ==========================================================================
+# clinical_rules.yaml — configurable clinical rule set (Phase 3)
+# SINGLE SOURCE OF TRUTH for biomarker classification. Used by both the
+# rule engine (inference) and Phase-2 Layer-1 labelling — they cannot drift.
+#
+# Add a new biomarker by adding a block here. NO Python changes required.
+#
+# Every biomarker is `category: blood` — an analyte from the blood test report.
+# (Non-blood inputs such as BP/BMI/waist are intentionally out of scope: this is
+#  a blood-test-report system. Weight & BP are signposted to the GP instead.)
+#
+# Per-biomarker `bands` are evaluated in order; a value falls in the first band
+# whose [min, max) contains it (min inclusive, max exclusive; omit min/max for
+# open-ended -inf/+inf). min/max may be a scalar OR a sex map {male:.., female:..}.
+#
+# Each band declares:
+#   status        one of: normal | borderline | low | high | severe
+#   severity      fusion contribution: normal | borderline | serious
+#   direction     low (below range) | high (above range) | in_range   (optional)
+#   urgent        optional; defaults to true when status == severe
+#   guideline     {source, code}   provenance for the interpretation
+#   interpretation  template; placeholders {name} {value} {unit}
+# ==========================================================================
+
+meta:
+  ruleset_version: "1.1"
+  severity_order: [normal, borderline, serious]
+  status_vocabulary: [normal, low, high, borderline, severe]
+
+  # --- Label aggregation policy (weighted-core) --------------------------- #
+  # Overall severity across the actionable panel:
+  #   * any actionable SERIOUS marker            -> serious
+  #   * a CORE marker at borderline              -> borderline on its own
+  #   * SECONDARY markers                        -> borderline only when
+  #     >= secondary_borderline_min are mildly abnormal (prevents isolated
+  #     incidental findings, e.g. one raised RDW or vitamin-D insufficiency,
+  #     from flagging otherwise-healthy people).
+  # Core = cardiometabolic markers + measurements (strong lifestyle signal).
+  secondary_borderline_min: 2
+  label_secondary_markers:
+    [hemoglobin, hematocrit, rbc, mcv, mch, mchc, rdw,
+     alt, ast, alp, albumin, total_bilirubin,
+     creatinine, bun, vitamin_d]
+
+biomarkers:
+
+  hba1c_pct:
+    name: HbA1c
+    category: blood
+    unit: "%"
+    reference_range: {low: 4.0, high: 5.6}
+    bands:
+      - {status: normal,     max: 5.7,            severity: normal,     direction: in_range,
+         guideline: {source: WHO,  code: "Diabetes Dx"},
+         interpretation: "{name} {value}{unit} is within the normal range (<5.7%)."}
+      - {status: borderline, min: 5.7, max: 6.5,  severity: borderline, direction: high,
+         guideline: {source: NICE, code: "NG28"},
+         interpretation: "{name} {value}{unit} is in the pre-diabetes range (5.7-6.4%), indicating raised blood glucose."}
+      - {status: high,       min: 6.5, max: 9.0,  severity: serious,    direction: high,
+         guideline: {source: NICE, code: "NG28"},
+         interpretation: "{name} {value}{unit} is in the diabetes range (>=6.5%)."}
+      - {status: severe,     min: 9.0,            severity: serious,    direction: high, urgent: true,
+         guideline: {source: NICE, code: "NG28"},
+         interpretation: "{name} {value}{unit} indicates markedly elevated blood glucose (>=9%); prompt clinical review is advised."}
+
+  fasting_glucose_mgdl:
+    name: Fasting glucose
+    category: blood
+    unit: " mg/dL"
+    reference_range: {low: 70, high: 99}
+    bands:
+      - {status: severe,     max: 54,             severity: serious,    direction: low, urgent: true,
+         guideline: {source: WHO, code: "Hypoglycaemia"},
+         interpretation: "{name} {value}{unit} is severely low (<54); this can be dangerous and needs prompt attention."}
+      - {status: low,        min: 54, max: 70,     severity: borderline, direction: low,
+         guideline: {source: WHO, code: "Hypoglycaemia"},
+         interpretation: "{name} {value}{unit} is below the normal range (<70)."}
+      - {status: normal,     min: 70, max: 100,    severity: normal,     direction: in_range,
+         guideline: {source: WHO, code: "Glycaemia"},
+         interpretation: "{name} {value}{unit} is within the normal range (70-99)."}
+      - {status: borderline, min: 100, max: 126,   severity: borderline, direction: high,
+         guideline: {source: WHO, code: "IFG"},
+         interpretation: "{name} {value}{unit} indicates impaired fasting glucose (100-125)."}
+      - {status: high,       min: 126, max: 250,   severity: serious,    direction: high,
+         guideline: {source: NICE, code: "NG28"},
+         interpretation: "{name} {value}{unit} is in the diabetes range (>=126)."}
+      - {status: severe,     min: 250,             severity: serious,    direction: high, urgent: true,
+         guideline: {source: NICE, code: "NG28"},
+         interpretation: "{name} {value}{unit} is very high (>=250); prompt clinical review is advised."}
+
+  total_chol_mgdl:
+    name: Total cholesterol
+    category: blood
+    unit: " mg/dL"
+    reference_range: {low: 0, high: 199}
+    bands:
+      - {status: normal,     max: 200,            severity: normal,     direction: in_range,
+         guideline: {source: NHS,  code: "Cholesterol"},
+         interpretation: "{name} {value}{unit} is desirable (<200)."}
+      - {status: borderline, min: 200, max: 240,  severity: borderline, direction: high,
+         guideline: {source: NHS,  code: "Cholesterol"},
+         interpretation: "{name} {value}{unit} is borderline high (200-239)."}
+      - {status: high,       min: 240, max: 310,  severity: serious,    direction: high,
+         guideline: {source: "NCEP", code: "ATP III"},
+         interpretation: "{name} {value}{unit} is high (>=240)."}
+      - {status: severe,     min: 310,            severity: serious,    direction: high, urgent: true,
+         guideline: {source: NICE, code: "CG181"},
+         interpretation: "{name} {value}{unit} is very high (>=310); possible familial hypercholesterolaemia — clinical review advised."}
+
+  hdl_mgdl:
+    name: HDL cholesterol
+    category: blood
+    unit: " mg/dL"
+    reference_range: {low: {male: 40, female: 50}, high: 200}
+    bands:
+      - {status: severe,     max: 30,                          severity: serious,    direction: low, urgent: true,
+         guideline: {source: NICE, code: "CG181"},
+         interpretation: "{name} {value}{unit} is very low (<30); a strong independent cardiovascular risk factor."}
+      - {status: low,        min: 30, max: {male: 40, female: 50}, severity: borderline, direction: low,
+         guideline: {source: "NCEP", code: "ATP III"},
+         interpretation: "{name} {value}{unit} is below the protective level, which raises cardiovascular risk."}
+      - {status: normal,     min: {male: 40, female: 50},      severity: normal,     direction: in_range,
+         guideline: {source: "NCEP", code: "ATP III"},
+         interpretation: "{name} {value}{unit} is at a protective (healthy) level."}
+
+  ldl_mgdl:
+    name: LDL cholesterol
+    category: blood
+    unit: " mg/dL"
+    reference_range: {low: 0, high: 129}
+    bands:
+      - {status: normal,     max: 130,            severity: normal,     direction: in_range,
+         guideline: {source: "NCEP", code: "ATP III"},
+         interpretation: "{name} {value}{unit} is at or near optimal (<130)."}
+      - {status: borderline, min: 130, max: 160,  severity: borderline, direction: high,
+         guideline: {source: "NCEP", code: "ATP III"},
+         interpretation: "{name} {value}{unit} is borderline high (130-159)."}
+      - {status: high,       min: 160, max: 190,  severity: serious,    direction: high,
+         guideline: {source: NICE, code: "CG181"},
+         interpretation: "{name} {value}{unit} is high (160-189)."}
+      - {status: severe,     min: 190,            severity: serious,    direction: high, urgent: true,
+         guideline: {source: NICE, code: "CG181"},
+         interpretation: "{name} {value}{unit} is very high (>=190); possible familial hypercholesterolaemia — clinical review advised."}
+
+  triglycerides_mgdl:
+    name: Triglycerides
+    category: blood
+    unit: " mg/dL"
+    reference_range: {low: 0, high: 149}
+    bands:
+      - {status: normal,     max: 150,            severity: normal,     direction: in_range,
+         guideline: {source: "NCEP", code: "ATP III"},
+         interpretation: "{name} {value}{unit} is normal (<150)."}
+      - {status: borderline, min: 150, max: 200,  severity: borderline, direction: high,
+         guideline: {source: "NCEP", code: "ATP III"},
+         interpretation: "{name} {value}{unit} is borderline high (150-199)."}
+      - {status: high,       min: 200, max: 500,  severity: serious,    direction: high,
+         guideline: {source: "NCEP", code: "ATP III"},
+         interpretation: "{name} {value}{unit} is high (200-499)."}
+      - {status: severe,     min: 500,            severity: serious,    direction: high, urgent: true,
+         guideline: {source: NICE, code: "CG181"},
+         interpretation: "{name} {value}{unit} is very high (>=500), carrying a risk of pancreatitis; prompt review advised."}
+
+  # ======================= COMPLETE BLOOD COUNT ============================
+  # Red-cell indices are lifestyle-actionable via anaemia (iron/B12/folate).
+  hemoglobin:
+    name: Haemoglobin
+    category: blood
+    tier: actionable
+    unit: " g/dL"
+    reference_range: {low: {male: 13.5, female: 12.0}, high: {male: 17.5, female: 15.5}}
+    bands:
+      - {status: severe, max: 8, severity: serious, direction: low, urgent: true,
+         guideline: {source: WHO, code: "Anaemia"},
+         interpretation: "{name} {value}{unit} is very low (<8), indicating severe anaemia; prompt review advised."}
+      - {status: low, min: 8, max: {male: 13.5, female: 12.0}, severity: borderline, direction: low,
+         guideline: {source: WHO, code: "Anaemia"},
+         interpretation: "{name} {value}{unit} is below normal, suggesting anaemia."}
+      - {status: normal, min: {male: 13.5, female: 12.0}, max: {male: 17.5, female: 15.5}, severity: normal, direction: in_range,
+         guideline: {source: WHO, code: "Anaemia"},
+         interpretation: "{name} {value}{unit} is within the normal range."}
+      - {status: high, min: {male: 17.5, female: 15.5}, max: 20, severity: borderline, direction: high,
+         guideline: {source: "Clinical reference range", code: "CBC"},
+         interpretation: "{name} {value}{unit} is above normal (possible polycythaemia)."}
+      - {status: severe, min: 20, severity: serious, direction: high, urgent: true,
+         guideline: {source: "Clinical reference range", code: "CBC"},
+         interpretation: "{name} {value}{unit} is markedly high; prompt review advised."}
+
+  hematocrit:
+    name: Haematocrit
+    category: blood
+    tier: actionable
+    unit: "%"
+    reference_range: {low: {male: 38.8, female: 34.9}, high: {male: 50.0, female: 44.5}}
+    bands:
+      - {status: severe, max: 25, severity: serious, direction: low, urgent: true,
+         guideline: {source: "Clinical reference range", code: "CBC"},
+         interpretation: "{name} {value}{unit} is very low (<25%), indicating severe anaemia; prompt review advised."}
+      - {status: low, min: 25, max: {male: 38.8, female: 34.9}, severity: borderline, direction: low,
+         guideline: {source: "Clinical reference range", code: "CBC"},
+         interpretation: "{name} {value}{unit} is below normal, consistent with anaemia."}
+      - {status: normal, min: {male: 38.8, female: 34.9}, max: {male: 50.0, female: 44.5}, severity: normal, direction: in_range,
+         guideline: {source: "Clinical reference range", code: "CBC"},
+         interpretation: "{name} {value}{unit} is within the normal range."}
+      - {status: high, min: {male: 50.0, female: 44.5}, severity: borderline, direction: high,
+         guideline: {source: "Clinical reference range", code: "CBC"},
+         interpretation: "{name} {value}{unit} is above normal."}
+
+  rbc:
+    name: Red blood cell count
+    category: blood
+    tier: actionable
+    unit: " million/uL"
+    reference_range: {low: {male: 4.35, female: 3.92}, high: {male: 5.65, female: 5.13}}
+    bands:
+      - {status: severe, max: 3.0, severity: serious, direction: low, urgent: true,
+         guideline: {source: "Clinical reference range", code: "CBC"},
+         interpretation: "{name} {value}{unit} is very low; prompt review advised."}
+      - {status: low, min: 3.0, max: {male: 4.35, female: 3.92}, severity: borderline, direction: low,
+         guideline: {source: "Clinical reference range", code: "CBC"},
+         interpretation: "{name} {value}{unit} is below normal, consistent with anaemia."}
+      - {status: normal, min: {male: 4.35, female: 3.92}, max: {male: 5.65, female: 5.13}, severity: normal, direction: in_range,
+         guideline: {source: "Clinical reference range", code: "CBC"},
+         interpretation: "{name} {value}{unit} is within the normal range."}
+      - {status: high, min: {male: 5.65, female: 5.13}, severity: borderline, direction: high,
+         guideline: {source: "Clinical reference range", code: "CBC"},
+         interpretation: "{name} {value}{unit} is above normal."}
+
+  mcv:
+    name: MCV
+    category: blood
+    tier: actionable
+    unit: " fL"
+    reference_range: {low: 80, high: 100}
+    bands:
+      - {status: low, max: 80, severity: borderline, direction: low,
+         guideline: {source: "Clinical reference range", code: "CBC"},
+         interpretation: "{name} {value}{unit} is low (microcytic), often seen with iron deficiency."}
+      - {status: normal, min: 80, max: 100, severity: normal, direction: in_range,
+         guideline: {source: "Clinical reference range", code: "CBC"},
+         interpretation: "{name} {value}{unit} is within the normal range."}
+      - {status: high, min: 100, severity: borderline, direction: high,
+         guideline: {source: "Clinical reference range", code: "CBC"},
+         interpretation: "{name} {value}{unit} is high (macrocytic), often seen with B12/folate deficiency."}
+
+  mch:
+    name: MCH
+    category: blood
+    tier: actionable
+    unit: " pg"
+    reference_range: {low: 27, high: 33}
+    bands:
+      - {status: low, max: 27, severity: borderline, direction: low,
+         guideline: {source: "Clinical reference range", code: "CBC"},
+         interpretation: "{name} {value}{unit} is low (hypochromic), often with iron deficiency."}
+      - {status: normal, min: 27, max: 33, severity: normal, direction: in_range,
+         guideline: {source: "Clinical reference range", code: "CBC"},
+         interpretation: "{name} {value}{unit} is within the normal range."}
+      - {status: high, min: 33, severity: borderline, direction: high,
+         guideline: {source: "Clinical reference range", code: "CBC"},
+         interpretation: "{name} {value}{unit} is above normal."}
+
+  mchc:
+    name: MCHC
+    category: blood
+    tier: actionable
+    unit: " g/dL"
+    reference_range: {low: 32, high: 36}
+    bands:
+      - {status: low, max: 32, severity: borderline, direction: low,
+         guideline: {source: "Clinical reference range", code: "CBC"},
+         interpretation: "{name} {value}{unit} is low, often with iron deficiency."}
+      - {status: normal, min: 32, max: 36, severity: normal, direction: in_range,
+         guideline: {source: "Clinical reference range", code: "CBC"},
+         interpretation: "{name} {value}{unit} is within the normal range."}
+      - {status: high, min: 36, severity: borderline, direction: high,
+         guideline: {source: "Clinical reference range", code: "CBC"},
+         interpretation: "{name} {value}{unit} is above normal."}
+
+  rdw:
+    name: RDW
+    category: blood
+    tier: actionable
+    unit: "%"
+    reference_range: {low: 11.5, high: 14.5}
+    bands:
+      - {status: normal, max: 14.5, severity: normal, direction: in_range,
+         guideline: {source: "Clinical reference range", code: "CBC"},
+         interpretation: "{name} {value}{unit} is within the normal range."}
+      - {status: high, min: 14.5, severity: borderline, direction: high,
+         guideline: {source: "Clinical reference range", code: "CBC"},
+         interpretation: "{name} {value}{unit} is raised (anisocytosis), an early sign of iron/B12/folate deficiency."}
+
+  # WBC and platelets are flag-only: reported and escalated, never turned into
+  # lifestyle advice (they reflect infection/haematologic/medical causes).
+  wbc:
+    name: White blood cell count
+    category: blood
+    tier: flag_only
+    unit: " 1000/uL"
+    reference_range: {low: 4.5, high: 11.0}
+    bands:
+      - {status: severe, max: 2.0, severity: serious, direction: low, urgent: true,
+         guideline: {source: "Clinical reference range", code: "CBC"},
+         interpretation: "{name} {value}{unit} is very low; prompt clinical review advised."}
+      - {status: low, min: 2.0, max: 4.5, severity: borderline, direction: low,
+         guideline: {source: "Clinical reference range", code: "CBC"},
+         interpretation: "{name} {value}{unit} is below normal; discuss with a clinician."}
+      - {status: normal, min: 4.5, max: 11.0, severity: normal, direction: in_range,
+         guideline: {source: "Clinical reference range", code: "CBC"},
+         interpretation: "{name} {value}{unit} is within the normal range."}
+      - {status: high, min: 11.0, max: 30.0, severity: borderline, direction: high,
+         guideline: {source: "Clinical reference range", code: "CBC"},
+         interpretation: "{name} {value}{unit} is above normal; may indicate infection — discuss with a clinician."}
+      - {status: severe, min: 30.0, severity: serious, direction: high, urgent: true,
+         guideline: {source: "Clinical reference range", code: "CBC"},
+         interpretation: "{name} {value}{unit} is markedly high; prompt clinical review advised."}
+
+  platelets:
+    name: Platelet count
+    category: blood
+    tier: flag_only
+    unit: " 1000/uL"
+    reference_range: {low: 150, high: 400}
+    bands:
+      - {status: severe, max: 50, severity: serious, direction: low, urgent: true,
+         guideline: {source: "Clinical reference range", code: "CBC"},
+         interpretation: "{name} {value}{unit} is very low; prompt clinical review advised."}
+      - {status: low, min: 50, max: 150, severity: borderline, direction: low,
+         guideline: {source: "Clinical reference range", code: "CBC"},
+         interpretation: "{name} {value}{unit} is below normal; discuss with a clinician."}
+      - {status: normal, min: 150, max: 400, severity: normal, direction: in_range,
+         guideline: {source: "Clinical reference range", code: "CBC"},
+         interpretation: "{name} {value}{unit} is within the normal range."}
+      - {status: high, min: 400, max: 1000, severity: borderline, direction: high,
+         guideline: {source: "Clinical reference range", code: "CBC"},
+         interpretation: "{name} {value}{unit} is above normal; discuss with a clinician."}
+      - {status: severe, min: 1000, severity: serious, direction: high, urgent: true,
+         guideline: {source: "Clinical reference range", code: "CBC"},
+         interpretation: "{name} {value}{unit} is markedly high; prompt clinical review advised."}
+
+  # ============================ LIVER =====================================
+  alt:
+    name: ALT
+    category: blood
+    tier: actionable
+    unit: " U/L"
+    reference_range: {low: 0, high: 40}
+    bands:
+      - {status: normal, max: 41, severity: normal, direction: in_range,
+         guideline: {source: NICE, code: "NG49"},
+         interpretation: "{name} {value}{unit} is within the normal range."}
+      - {status: borderline, min: 41, max: 101, severity: borderline, direction: high,
+         guideline: {source: NICE, code: "NG49"},
+         interpretation: "{name} {value}{unit} is mildly raised, often linked to fatty liver or alcohol."}
+      - {status: high, min: 101, max: 251, severity: serious, direction: high,
+         guideline: {source: NICE, code: "NG49"},
+         interpretation: "{name} {value}{unit} is raised, indicating liver stress."}
+      - {status: severe, min: 251, severity: serious, direction: high, urgent: true,
+         guideline: {source: NICE, code: "NG49"},
+         interpretation: "{name} {value}{unit} is markedly raised; prompt clinical review advised."}
+
+  ast:
+    name: AST
+    category: blood
+    tier: actionable
+    unit: " U/L"
+    reference_range: {low: 0, high: 40}
+    bands:
+      - {status: normal, max: 41, severity: normal, direction: in_range,
+         guideline: {source: "Clinical reference range", code: "LFT"},
+         interpretation: "{name} {value}{unit} is within the normal range."}
+      - {status: borderline, min: 41, max: 101, severity: borderline, direction: high,
+         guideline: {source: "Clinical reference range", code: "LFT"},
+         interpretation: "{name} {value}{unit} is mildly raised, often linked to fatty liver or alcohol."}
+      - {status: high, min: 101, max: 251, severity: serious, direction: high,
+         guideline: {source: "Clinical reference range", code: "LFT"},
+         interpretation: "{name} {value}{unit} is raised, indicating liver stress."}
+      - {status: severe, min: 251, severity: serious, direction: high, urgent: true,
+         guideline: {source: "Clinical reference range", code: "LFT"},
+         interpretation: "{name} {value}{unit} is markedly raised; prompt clinical review advised."}
+
+  alp:
+    name: ALP
+    category: blood
+    tier: actionable
+    unit: " U/L"
+    reference_range: {low: 44, high: 147}
+    bands:
+      - {status: low, max: 44, severity: borderline, direction: low,
+         guideline: {source: "Clinical reference range", code: "LFT"},
+         interpretation: "{name} {value}{unit} is below normal."}
+      - {status: normal, min: 44, max: 148, severity: normal, direction: in_range,
+         guideline: {source: "Clinical reference range", code: "LFT"},
+         interpretation: "{name} {value}{unit} is within the normal range."}
+      - {status: borderline, min: 148, max: 250, severity: borderline, direction: high,
+         guideline: {source: "Clinical reference range", code: "LFT"},
+         interpretation: "{name} {value}{unit} is mildly raised."}
+      - {status: high, min: 250, severity: serious, direction: high,
+         guideline: {source: "Clinical reference range", code: "LFT"},
+         interpretation: "{name} {value}{unit} is raised; discuss with a clinician."}
+
+  albumin:
+    name: Albumin
+    category: blood
+    tier: actionable
+    unit: " g/dL"
+    reference_range: {low: 3.5, high: 5.0}
+    bands:
+      - {status: severe, max: 2.5, severity: serious, direction: low, urgent: true,
+         guideline: {source: "Clinical reference range", code: "LFT"},
+         interpretation: "{name} {value}{unit} is very low; prompt clinical review advised."}
+      - {status: low, min: 2.5, max: 3.5, severity: borderline, direction: low,
+         guideline: {source: "Clinical reference range", code: "LFT"},
+         interpretation: "{name} {value}{unit} is below normal, which can reflect poor nutrition or liver/kidney issues."}
+      - {status: normal, min: 3.5, max: 5.0, severity: normal, direction: in_range,
+         guideline: {source: "Clinical reference range", code: "LFT"},
+         interpretation: "{name} {value}{unit} is within the normal range."}
+      - {status: high, min: 5.0, severity: borderline, direction: high,
+         guideline: {source: "Clinical reference range", code: "LFT"},
+         interpretation: "{name} {value}{unit} is above normal (often dehydration)."}
+
+  total_bilirubin:
+    name: Total bilirubin
+    category: blood
+    tier: actionable
+    unit: " mg/dL"
+    reference_range: {low: 0, high: 1.2}
+    bands:
+      - {status: normal, max: 1.3, severity: normal, direction: in_range,
+         guideline: {source: "Clinical reference range", code: "LFT"},
+         interpretation: "{name} {value}{unit} is within the normal range."}
+      - {status: borderline, min: 1.3, max: 2.1, severity: borderline, direction: high,
+         guideline: {source: "Clinical reference range", code: "LFT"},
+         interpretation: "{name} {value}{unit} is mildly raised."}
+      - {status: high, min: 2.1, max: 5.0, severity: serious, direction: high,
+         guideline: {source: "Clinical reference range", code: "LFT"},
+         interpretation: "{name} {value}{unit} is raised (possible jaundice); discuss with a clinician."}
+      - {status: severe, min: 5.0, severity: serious, direction: high, urgent: true,
+         guideline: {source: "Clinical reference range", code: "LFT"},
+         interpretation: "{name} {value}{unit} is markedly raised; prompt clinical review advised."}
+
+  # ============================ KIDNEY ====================================
+  creatinine:
+    name: Creatinine
+    category: blood
+    tier: actionable
+    unit: " mg/dL"
+    reference_range: {low: {male: 0.74, female: 0.59}, high: {male: 1.35, female: 1.04}}
+    bands:
+      - {status: normal, max: {male: 1.35, female: 1.11}, severity: normal, direction: in_range,
+         guideline: {source: NICE, code: "NG203"},
+         interpretation: "{name} {value}{unit} is within the normal range."}
+      - {status: borderline, min: {male: 1.35, female: 1.11}, max: 2.0, severity: borderline, direction: high,
+         guideline: {source: NICE, code: "NG203"},
+         interpretation: "{name} {value}{unit} is mildly raised, suggesting reduced kidney function."}
+      - {status: high, min: 2.0, max: 4.0, severity: serious, direction: high,
+         guideline: {source: NICE, code: "NG203"},
+         interpretation: "{name} {value}{unit} is raised, indicating impaired kidney function."}
+      - {status: severe, min: 4.0, severity: serious, direction: high, urgent: true,
+         guideline: {source: NICE, code: "NG203"},
+         interpretation: "{name} {value}{unit} is markedly raised; prompt clinical review advised."}
+
+  bun:
+    name: Blood urea nitrogen
+    category: blood
+    tier: actionable
+    unit: " mg/dL"
+    reference_range: {low: 7, high: 20}
+    bands:
+      - {status: low, max: 7, severity: borderline, direction: low,
+         guideline: {source: "Clinical reference range", code: "U&E"},
+         interpretation: "{name} {value}{unit} is below normal."}
+      - {status: normal, min: 7, max: 20, severity: normal, direction: in_range,
+         guideline: {source: "Clinical reference range", code: "U&E"},
+         interpretation: "{name} {value}{unit} is within the normal range."}
+      - {status: borderline, min: 20, max: 40, severity: borderline, direction: high,
+         guideline: {source: "Clinical reference range", code: "U&E"},
+         interpretation: "{name} {value}{unit} is mildly raised (dehydration or reduced kidney function)."}
+      - {status: high, min: 40, max: 100, severity: serious, direction: high,
+         guideline: {source: "Clinical reference range", code: "U&E"},
+         interpretation: "{name} {value}{unit} is raised; discuss with a clinician."}
+      - {status: severe, min: 100, severity: serious, direction: high, urgent: true,
+         guideline: {source: "Clinical reference range", code: "U&E"},
+         interpretation: "{name} {value}{unit} is markedly raised; prompt clinical review advised."}
+
+  # ===================== ELECTROLYTES (flag-only) =========================
+  # Tightly regulated; abnormalities are medical (not lifestyle) and can be
+  # dangerous — reported and escalated, never turned into lifestyle advice.
+  sodium:
+    name: Sodium
+    category: blood
+    tier: flag_only
+    unit: " mmol/L"
+    reference_range: {low: 135, high: 145}
+    bands:
+      - {status: severe, max: 125, severity: serious, direction: low, urgent: true,
+         guideline: {source: "Clinical reference range", code: "U&E"},
+         interpretation: "{name} {value}{unit} is very low; prompt clinical review advised."}
+      - {status: low, min: 125, max: 135, severity: borderline, direction: low,
+         guideline: {source: "Clinical reference range", code: "U&E"},
+         interpretation: "{name} {value}{unit} is below normal; discuss with a clinician."}
+      - {status: normal, min: 135, max: 145, severity: normal, direction: in_range,
+         guideline: {source: "Clinical reference range", code: "U&E"},
+         interpretation: "{name} {value}{unit} is within the normal range."}
+      - {status: high, min: 145, max: 155, severity: borderline, direction: high,
+         guideline: {source: "Clinical reference range", code: "U&E"},
+         interpretation: "{name} {value}{unit} is above normal; discuss with a clinician."}
+      - {status: severe, min: 155, severity: serious, direction: high, urgent: true,
+         guideline: {source: "Clinical reference range", code: "U&E"},
+         interpretation: "{name} {value}{unit} is very high; prompt clinical review advised."}
+
+  potassium:
+    name: Potassium
+    category: blood
+    tier: flag_only
+    unit: " mmol/L"
+    reference_range: {low: 3.5, high: 5.0}
+    bands:
+      - {status: severe, max: 2.5, severity: serious, direction: low, urgent: true,
+         guideline: {source: "Clinical reference range", code: "U&E"},
+         interpretation: "{name} {value}{unit} is very low; prompt clinical review advised."}
+      - {status: low, min: 2.5, max: 3.5, severity: borderline, direction: low,
+         guideline: {source: "Clinical reference range", code: "U&E"},
+         interpretation: "{name} {value}{unit} is below normal; discuss with a clinician."}
+      - {status: normal, min: 3.5, max: 5.0, severity: normal, direction: in_range,
+         guideline: {source: "Clinical reference range", code: "U&E"},
+         interpretation: "{name} {value}{unit} is within the normal range."}
+      - {status: high, min: 5.0, max: 6.0, severity: borderline, direction: high,
+         guideline: {source: "Clinical reference range", code: "U&E"},
+         interpretation: "{name} {value}{unit} is above normal; discuss with a clinician."}
+      - {status: severe, min: 6.0, severity: serious, direction: high, urgent: true,
+         guideline: {source: "Clinical reference range", code: "U&E"},
+         interpretation: "{name} {value}{unit} is very high (arrhythmia risk); prompt clinical review advised."}
+
+  chloride:
+    name: Chloride
+    category: blood
+    tier: flag_only
+    unit: " mmol/L"
+    reference_range: {low: 98, high: 107}
+    bands:
+      - {status: severe, max: 80, severity: serious, direction: low, urgent: true,
+         guideline: {source: "Clinical reference range", code: "U&E"},
+         interpretation: "{name} {value}{unit} is very low; prompt clinical review advised."}
+      - {status: low, min: 80, max: 98, severity: borderline, direction: low,
+         guideline: {source: "Clinical reference range", code: "U&E"},
+         interpretation: "{name} {value}{unit} is below normal; discuss with a clinician."}
+      - {status: normal, min: 98, max: 107, severity: normal, direction: in_range,
+         guideline: {source: "Clinical reference range", code: "U&E"},
+         interpretation: "{name} {value}{unit} is within the normal range."}
+      - {status: high, min: 107, max: 120, severity: borderline, direction: high,
+         guideline: {source: "Clinical reference range", code: "U&E"},
+         interpretation: "{name} {value}{unit} is above normal; discuss with a clinician."}
+      - {status: severe, min: 120, severity: serious, direction: high, urgent: true,
+         guideline: {source: "Clinical reference range", code: "U&E"},
+         interpretation: "{name} {value}{unit} is very high; prompt clinical review advised."}
+
+  calcium:
+    name: Calcium
+    category: blood
+    tier: flag_only
+    unit: " mg/dL"
+    reference_range: {low: 8.5, high: 10.2}
+    bands:
+      - {status: severe, max: 6.0, severity: serious, direction: low, urgent: true,
+         guideline: {source: "Clinical reference range", code: "Bone profile"},
+         interpretation: "{name} {value}{unit} is very low; prompt clinical review advised."}
+      - {status: low, min: 6.0, max: 8.5, severity: borderline, direction: low,
+         guideline: {source: "Clinical reference range", code: "Bone profile"},
+         interpretation: "{name} {value}{unit} is below normal; discuss with a clinician."}
+      - {status: normal, min: 8.5, max: 10.2, severity: normal, direction: in_range,
+         guideline: {source: "Clinical reference range", code: "Bone profile"},
+         interpretation: "{name} {value}{unit} is within the normal range."}
+      - {status: high, min: 10.2, max: 13.0, severity: borderline, direction: high,
+         guideline: {source: "Clinical reference range", code: "Bone profile"},
+         interpretation: "{name} {value}{unit} is above normal; discuss with a clinician."}
+      - {status: severe, min: 13.0, severity: serious, direction: high, urgent: true,
+         guideline: {source: "Clinical reference range", code: "Bone profile"},
+         interpretation: "{name} {value}{unit} is very high; prompt clinical review advised."}
+
+  # ============================ VITAMINS ==================================
+  # Vitamin D is lifestyle-actionable (sun exposure, diet, supplements).
+  # UK thresholds (NHS/NICE): <25 deficient, 25-50 insufficient, >50 sufficient.
+  vitamin_d:
+    name: Vitamin D
+    category: blood
+    tier: actionable
+    unit: " nmol/L"
+    reference_range: {low: 50, high: 125}
+    bands:
+      - {status: low, max: 25, severity: borderline, direction: low,
+         guideline: {source: NHS, code: "Vitamin D"},
+         interpretation: "{name} {value}{unit} indicates deficiency (<25)."}
+      - {status: borderline, min: 25, max: 50, severity: borderline, direction: low,
+         guideline: {source: NHS, code: "Vitamin D"},
+         interpretation: "{name} {value}{unit} indicates insufficiency (25-50)."}
+      - {status: normal, min: 50, max: 125, severity: normal, direction: in_range,
+         guideline: {source: NHS, code: "Vitamin D"},
+         interpretation: "{name} {value}{unit} is sufficient (50-125)."}
+      - {status: high, min: 125, max: 250, severity: borderline, direction: high,
+         guideline: {source: NHS, code: "Vitamin D"},
+         interpretation: "{name} {value}{unit} is high (>125)."}
+      - {status: severe, min: 250, severity: serious, direction: high, urgent: true,
+         guideline: {source: NHS, code: "Vitamin D"},
+         interpretation: "{name} {value}{unit} is in the potentially toxic range (>250); clinical review advised."}
