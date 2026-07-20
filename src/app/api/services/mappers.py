@@ -6,7 +6,7 @@ in exactly one place.
 """
 from __future__ import annotations
 
-from ..schemas.common import AssessmentOut, BiomarkerResultOut, MarkerOut
+from ..schemas.common import AssessmentOut, BiomarkerResultOut, MarkerOut, RiskDriverOut
 from ..schemas.recommend import EvidenceRefOut, GroundednessOut, ReportOut
 from ..schemas.retrieve import PassageOut
 
@@ -28,6 +28,7 @@ def assessment_out(rule_result, fused) -> AssessmentOut:
         rf_severity=fused.rf_severity,
         rf_probabilities=fused.rf_probabilities,
         escalated_by_rf=fused.escalated_by_rf,
+        rf_drivers=[RiskDriverOut(**d) for d in getattr(fused, "rf_drivers", [])],
         urgent_referral=fused.urgent_referral,
         flagged=[MarkerOut(**f) for f in fused.flagged],
         signpost=[MarkerOut(**s) for s in fused.signpost],

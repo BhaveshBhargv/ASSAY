@@ -33,6 +33,8 @@ class FusedAssessment:
     rf_probabilities: dict = field(default_factory=dict)
     escalated_by_rf: bool = False
     urgent_referral: bool = False
+    # per-patient SHAP drivers of the RF read: [{feature, label, value, contribution}]
+    rf_drivers: list[dict] = field(default_factory=list)
     # markers the LLM will advise on: [{code, name, status, severity, interpretation}]
     flagged: list[dict] = field(default_factory=list)
     # flag-only abnormal markers → clinician signpost text, never lifestyle advice
@@ -50,6 +52,7 @@ class FusedAssessment:
             "rf_probabilities": self.rf_probabilities,
             "escalated_by_rf": self.escalated_by_rf,
             "urgent_referral": self.urgent_referral,
+            "rf_drivers": self.rf_drivers,
             "flagged": self.flagged,
             "signpost": self.signpost,
         }
@@ -70,6 +73,7 @@ def fuse(rule_result: RuleEngineResult, rf_output: Optional[dict]) -> FusedAsses
     rule_sev = rule_result.overall_severity.value
     rf_sev = rf_output.get("predicted_severity") if rf_output else None
     rf_probs = rf_output.get("probabilities", {}) if rf_output else {}
+    rf_drivers = rf_output.get("drivers", []) if rf_output else []
 
     final = _max_severity(rule_sev, rf_sev) if rf_sev else rule_sev
     escalated = bool(
@@ -100,6 +104,7 @@ def fuse(rule_result: RuleEngineResult, rf_output: Optional[dict]) -> FusedAsses
         rf_severity=rf_sev,
         rf_probabilities=rf_probs,
         escalated_by_rf=escalated,
+        rf_drivers=rf_drivers,
         urgent_referral=rule_result.urgent_referral,
         flagged=flagged,
         signpost=signpost,

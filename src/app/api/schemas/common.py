@@ -66,12 +66,22 @@ class MarkerOut(BaseModel):
     interpretation: str
 
 
+class RiskDriverOut(BaseModel):
+    feature: str = Field(..., description="Model feature column that drove the read.")
+    label: str = Field(..., description="Patient-friendly label for the feature.")
+    value: Optional[float] = Field(None, description="The patient's value for this feature.")
+    contribution: float = Field(..., description="Positive SHAP contribution toward the predicted class.")
+
+
 class AssessmentOut(BaseModel):
     severity: str = Field(..., description="Fused overall severity (safety-dominant max of rules and model).")
     rule_severity: str
     rf_severity: Optional[str] = Field(None, description="Random Forest predicted class (null if unavailable).")
     rf_probabilities: dict = Field(default_factory=dict)
     escalated_by_rf: bool = Field(..., description="True when the model raised risk above the rules (hidden-pattern signal).")
+    rf_drivers: list[RiskDriverOut] = Field(
+        default_factory=list,
+        description="Per-patient SHAP drivers of the model's read (only for a raised-risk prediction).")
     urgent_referral: bool
     flagged: list[MarkerOut] = Field(..., description="Actionable abnormal markers → lifestyle advice.")
     signpost: list[MarkerOut] = Field(..., description="Flag-only abnormal markers → discuss with clinician.")

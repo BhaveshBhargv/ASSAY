@@ -108,6 +108,40 @@ def stat_tiles(fused, rule_result, audit=None) -> str:
     return f'<div class="tiles">{cells}</div>'
 
 
+# --- model drivers (per-patient SHAP) -------------------------------------- #
+
+def rf_drivers(fused) -> str:
+    """Which biomarkers the RF weighed most in reaching its read (per-patient SHAP).
+
+    Rendered only when the model returned drivers — i.e. it read a raised-risk
+    pattern. When it escalated past the rules, the copy makes the honest point that
+    each value can look normal alone; it's the combination that raised the risk."""
+    drivers = getattr(fused, "rf_drivers", None) or []
+    if not drivers:
+        return ""
+
+    lede = ("Each of these can sit within its usual range on its own — the model "
+            "weighed them together and read the overall pattern as higher risk."
+            if fused.escalated_by_rf else
+            "The markers the model weighed most in reaching its read.")
+
+    max_c = max((d.get("contribution", 0) for d in drivers), default=0) or 1.0
+    rows = []
+    for d in drivers:
+        pct = max(6.0, float(d.get("contribution", 0)) / max_c * 100)
+        val = d.get("value")
+        val_html = "" if val is None else f'<span class="drv-val">{_fmt(val)}</span>'
+        rows.append(
+            f'<div class="drv-row">'
+            f'  <div class="drv-name">{_esc(d.get("label", ""))}{val_html}</div>'
+            f'  <div class="drv-bar"><div class="drv-fill" style="width:{pct:.0f}%;"></div></div>'
+            f'</div>'
+        )
+    return (f'<div class="panel drivers">'
+            f'<div class="rec-sec-title">What drove the model’s read</div>'
+            f'<div class="section-note">{_esc(lede)}</div>{"".join(rows)}</div>')
+
+
 # --- severity table with range strips (signature) -------------------------- #
 
 def _strip(value: float, low, high, color: str) -> str:

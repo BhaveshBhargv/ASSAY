@@ -113,6 +113,20 @@ def build_pdf(demographics, rule_result, fused, evidence, report, audit, disclai
         pdf.para("Some results warrant prompt clinical attention - please contact your GP "
                  "or an appropriate service.", h=5, size=10, style="B", color=SEV_RGB["serious"])
 
+    # --- what drove the model's read (per-patient SHAP) -------------------- #
+    drivers = getattr(fused, "rf_drivers", None) or []
+    if drivers:
+        pdf.eyebrow("What drove the model's read")
+        lede = ("Each can sit within its usual range on its own - the model weighed them "
+                "together and read the overall pattern as higher risk."
+                if fused.escalated_by_rf else
+                "The markers the model weighed most in reaching its read.")
+        pdf.para(lede, h=5, size=9, color=MUTED)
+        for d in drivers:
+            val = d.get("value")
+            suffix = f" (value {_num(val)})" if val is not None else ""
+            pdf.para(f"- {d.get('label', '')}{suffix}", h=5, size=10, style="B")
+
     # --- severity table ---------------------------------------------------- #
     pdf.eyebrow("Severity table")
     widths = (58, 34, 40, 36)

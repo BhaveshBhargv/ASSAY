@@ -214,6 +214,22 @@ h1 { font-size: 2.15rem; }
 .callout.clin { background:#FFF6E9; border:1px solid #F0DCBA; color:#7A5A16; }
 .callout.info { background:var(--teal-tint); border:1px solid #C3E0E2; color:var(--teal-dark); }
 
+/* ---- model drivers (per-patient SHAP) ---------------------------------- */
+.panel.drivers { margin-top:.7rem; border-left:3px solid var(--borderline); }
+.drv-row { display:grid; grid-template-columns: minmax(9rem, 40%) 1fr; align-items:center;
+  gap:.9rem; padding:.4rem 0; }
+.drv-row + .drv-row { border-top:1px dashed var(--line); }
+.drv-name { font-weight:600; font-size:.92rem; color:var(--ink);
+  display:flex; align-items:baseline; gap:.5rem; }
+.drv-val { font-family:'IBM Plex Mono',monospace; font-size:.78rem; font-weight:500;
+  color:var(--muted); font-variant-numeric: tabular-nums; }
+.drv-bar { height:8px; border-radius:999px; background:color-mix(in srgb, var(--borderline) 12%, transparent);
+  overflow:hidden; }
+.drv-fill { height:100%; border-radius:999px;
+  background:linear-gradient(90deg, color-mix(in srgb, var(--borderline) 70%, #E8B85C), var(--borderline));
+  animation: drv-grow .5s ease both; }
+@keyframes drv-grow { from { transform: scaleX(0); transform-origin:left; } to { transform:none; } }
+
 /* ---- streamlit widget nudges ------------------------------------------- */
 .stButton>button, .stDownloadButton>button {
   font-family:'IBM Plex Sans',sans-serif; font-weight:600; border-radius:11px;
@@ -251,6 +267,7 @@ hr { border-color:var(--line); }
 @media (prefers-reduced-motion: reduce){
   *{scroll-behavior:auto!important;}
   .hero{animation:none!important;}
+  .drv-fill{animation:none!important;}
   .tile,.ev-card,.bm-row,.stButton>button,.stDownloadButton>button,
   [data-testid="stPageLink"] a{transition:none!important;}
 }

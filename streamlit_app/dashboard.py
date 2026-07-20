@@ -30,6 +30,18 @@ import streamlit as st  # noqa: E402
 st.set_page_config(page_title="Assay — Blood Report Insights", page_icon="🩸",
                    layout="wide", initial_sidebar_state="expanded")
 
+# Streamlit Community Cloud provides secrets via st.secrets (not env vars). Bridge
+# them into the environment so the os.getenv-based LLM providers pick them up.
+# Runs before importing the engine config so model/key overrides take effect.
+import os  # noqa: E402
+try:
+    for _k in ("OPENROUTER_API_KEY", "ASSAY_OPENROUTER_MODEL",
+               "ANTHROPIC_API_KEY", "OLLAMA_BASE_URL"):
+        if _k in st.secrets and not os.environ.get(_k):
+            os.environ[_k] = str(st.secrets[_k])
+except Exception:  # no secrets configured locally — that's fine
+    pass
+
 from app.recommend.config import DISCLAIMER          # noqa: E402
 from services import pipeline                          # noqa: E402
 from services.report_pdf import build_pdf             # noqa: E402
@@ -164,6 +176,10 @@ def render_results(assessment) -> None:
 
     _md(C.eyebrow("Risk summary"))
     _md(C.stat_tiles(fused, rule_result, audit))
+
+    drivers_html = C.rf_drivers(fused)
+    if drivers_html:
+        _md(drivers_html)
 
     _md(C.eyebrow("Severity table", "Each analyte against its reference range. "
                   "The marker shows where the value sits; the band is the normal range."))
