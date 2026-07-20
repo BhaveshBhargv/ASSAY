@@ -73,6 +73,7 @@ class OpenRouterProvider:
         self._chat = ChatOpenAI(
             model=model, api_key=api_key, base_url=C.OPENROUTER_BASE_URL,
             temperature=temperature, max_tokens=C.MAX_TOKENS,
+            extra_body={"reasoning": C.OPENROUTER_REASONING,},
         )
 
     def complete(self, system: str, user: str) -> str:

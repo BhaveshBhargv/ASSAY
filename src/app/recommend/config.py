@@ -36,6 +36,11 @@ OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 TEMPERATURE = 0.2
 MAX_TOKENS = 2048
 
+OPENROUTER_REASONING = {
+    "effort": "none",
+    "exclude": True,
+}
+
 # --- Retrieval ------------------------------------------------------------- #
 TOP_K_EVIDENCE = 6                 # guideline passages injected into the prompt
 
