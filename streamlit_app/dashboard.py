@@ -84,6 +84,8 @@ have_results = st.session_state.get("assessment") is not None
 with st.expander("Blood panel & values", expanded=not have_results):
     render_biomarker_form()
 
+settings.analyze = st.button("Analyze blood report", type="primary", use_container_width=True)
+
 # --- run: fast assessment now, LLM in the background ----------------------- #
 if settings.analyze:
     biomarkers = collect_biomarkers()

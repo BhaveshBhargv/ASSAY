@@ -120,7 +120,7 @@ def render_sidebar() -> Settings:
         sb.caption("⚠️ Age and sex are required to analyse.")
 
     # Recommendations generate automatically (OpenRouter by default); no controls.
-    generate, provider, model, recheck, k = True, "openrouter", "", False, 6
+    generate, provider, model, recheck, k = True, "openrouter", "", False, 10
 
     analyze = sb.button("Analyze blood report", type="primary", use_container_width=True)
     sb.caption("Recommendations generate automatically after the analysis. "
