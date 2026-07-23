@@ -122,13 +122,12 @@ def render_sidebar() -> Settings:
     # Recommendations generate automatically (OpenRouter by default); no controls.
     generate, provider, model, recheck, k = True, "openrouter", "", False, 10
 
-    analyze = sb.button("Analyze blood report", type="primary", use_container_width=True)
     sb.caption("Recommendations generate automatically after the analysis. "
                "Educational project — not for clinical use.")
 
     demographics = {"age": age, "sex": sex, **st.session_state["demo_extra"]}
     demographics_ok = (source == "Sample patient") or (age is not None and sex in _SEX_OPTIONS)
-    return Settings(analyze, generate, provider, model.strip(), k, recheck,
+    return Settings(False, generate, provider, model.strip(), k, recheck,
                     source, demographics, demographics_ok)
 
 

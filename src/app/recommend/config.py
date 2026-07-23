@@ -28,8 +28,7 @@ OLLAMA_MODEL = "llama3.1"          # `ollama pull llama3.1`
 ANTHROPIC_MODEL = "claude-sonnet-5"
 # OpenRouter (OpenAI-compatible gateway). Needs OPENROUTER_API_KEY. Free-tier
 # model slugs carry a ":free" suffix and change over time — override per request
-# / via ASSAY? no: pass `model` explicitly, or set ASSAY_OPENROUTER_MODEL.
-OPENROUTER_MODEL = os.getenv("ASSAY_OPENROUTER_MODEL", "tencent/hy3:free")
+OPENROUTER_MODEL = os.getenv("ASSAY_OPENROUTER_MODEL", "nvidia/nemotron-3-ultra-550b-a55b:free")
 OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1"
 
 # Deterministic-as-possible generation → less drift, easier to ground/verify.
