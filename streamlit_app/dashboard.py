@@ -81,7 +81,7 @@ for note in st.session_state.get("parse_notes", []):
 
 # --- input form ------------------------------------------------------------ #
 have_results = st.session_state.get("assessment") is not None
-with st.expander("Blood panel & values"):
+with st.expander("Blood panel & values", expanded=True):
     render_biomarker_form()
 
 left, right = st.columns([5, 1])
