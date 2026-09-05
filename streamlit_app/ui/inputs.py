@@ -146,7 +146,7 @@ def render_biomarker_form() -> None:
                     ref = f"ref {_n(rng['low'])}–{_n(rng['high'])}"
                 label = f"{meta['name']} ({meta['unit']})" if meta["unit"] else meta["name"]
                 cols[i % 3].number_input(
-                    label, min_value=0.0, step=0.1, format="%.2f",
+                    label, min_value=0.0, step=0.01, format="%.2f",
                     key=f"in_{code}", help=f"{ref} · 0 = not provided" if ref else "0 = not provided",
                 )
 
