@@ -3,8 +3,7 @@ merge.py — assemble one analysis table from all components and all cycles.
 
 Per cycle:
   DEMO is the base (one row per SEQN); every other component is LEFT-joined on
-  SEQN so demographics are never dropped by a missing lab. Blood pressure is
-  harmonised (bp_harmonize) before joining. RXQ_RX is collapsed to a single
+  SEQN so demographics are never dropped by a missing lab. RXQ_RX is collapsed to a single
   statin/metformin flag per person.
 Cycles are concatenated with a 'cycle' provenance column.
 """
