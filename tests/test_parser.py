@@ -18,6 +18,7 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from app.ingestion.report_parser import (  # noqa: E402
     extract_biomarkers_from_lines,
+    extract_demographics,
     parse_upload,
 )
 from app.ingestion.units import is_plausible, to_canonical  # noqa: E402
@@ -161,6 +162,43 @@ def test_value_is_not_paired_with_a_distant_label():
         ["Serum Creatinine", "Serum Potassium", "4.13 mmol/L 3.5 - 5.5"])
     assert found.get("creatinine") is None
     assert found["potassium"] == 4.13
+
+
+# --- patient demographics from the report header ----------------------------- #
+_HEADER_SHAPES = [
+    ("Female 61 yrs", 61, "female"),
+    ("Male, 60 Yrs", 60, "male"),
+    ("Gender: Female Age: 61 Yrs Patient ID: 17671820", 61, "female"),
+    ("DOB/Age/Gender : 61 Y/Female", 61, "female"),
+    ("Age/Gender : 60Y 0M 0D /Male", 60, "male"),
+    ("Sex : Male   Age : 45 Years", 45, "male"),
+]
+
+
+def test_demographics_from_header_shapes():
+    for line, age, sex in _HEADER_SHAPES:
+        got = extract_demographics([line])
+        assert got == {"age": age, "sex": sex}, (line, got)
+
+
+def test_demographics_ignores_reference_and_prose_lines():
+    """Guideline cut-offs mention ages too; none of them describe the patient."""
+    for line in ["Non diabetic adults >=18 years <5.7",
+                 "Age > 19 years", "Age < 19 years",
+                 "above 20 years of age must be screened for abnormal lipid levels.",
+                 "Age (Years) Male"]:
+        assert extract_demographics([line]) == {}, line
+
+
+def test_demographics_prefers_the_line_carrying_both():
+    """A paired header wins over a stray age or sex elsewhere on the page."""
+    got = extract_demographics(
+        ["Total Cholesterol 160 mg/dL", "78 yrs", "Gender: Female Age: 61 Yrs"])
+    assert got == {"age": 61, "sex": "female"}
+
+
+def test_demographics_absent_when_unreadable():
+    assert extract_demographics(["Hemoglobin 10.7 g/dL 12.0 - 15.0"]) == {}
 
 
 def _run_all():

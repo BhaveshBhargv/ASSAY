@@ -177,6 +177,71 @@ def extract_biomarkers_from_lines(lines: list[str]) -> tuple[dict[str, float], l
     return found, conversions
 
 
+# --- demographics ---------------------------------------------------------- #
+# Lab headers print age and sex in many shapes, all seen in real reports:
+#   "Female 61 yrs"                    "Male, 60 Yrs"
+#   "Gender: Female Age: 61 Yrs ..."   "Age/Gender : 60Y 0M 0D /Male"
+#   "DOB/Age/Gender : 61 Y/Female"
+_SEX_RE = re.compile(r"\b(female|male)\b", re.I)          # female first: it contains "male"
+_AGE_KEYED = re.compile(r"\bage\b\D{0,20}?(\d{1,3})", re.I)     # "Age: 61", "Age/Gender : 60Y"
+_AGE_UNITED = re.compile(r"\b(\d{1,3})\s*(?:y|yr|yrs|years)\b", re.I)   # "61 yrs"
+
+# Guideline and reference rows also mention ages ("Age > 19 years", "adults >=18
+# years"). They are prose about cut-offs, never the patient, so they are excluded.
+_DEMO_NOISE = (
+    "reference", "range", "normal", "adult", "screened", "recommend", "criteria",
+    "interpretation", "above", "below", "goal", "target", "table", "population",
+    "risk", "guideline", "category", "classification",
+    "(years)", "(yrs)",          # a column heading such as "Age (Years) Male"
+)
+_ADULT_AGE = (18, 120)
+
+
+def _demographics_from_line(line: str) -> tuple[int | None, str | None]:
+    """Age and/or sex printed on one header line, or (None, None)."""
+    low = line.lower()
+    if any(tok in low for tok in _DEMO_NOISE) or "<" in line or ">" in line:
+        return None, None
+    sex_m = _SEX_RE.search(low)
+    sex = sex_m.group(1) if sex_m else None
+
+    age = None
+    m = _AGE_KEYED.search(low) or (_AGE_UNITED.search(low) if sex else None)
+    if m:
+        value = int(m.group(1))
+        if _ADULT_AGE[0] <= value <= _ADULT_AGE[1]:
+            age = value
+    return age, sex
+
+
+def extract_demographics(lines: list[str]) -> dict:
+    """Patient age and sex from a report header.
+
+    A line carrying BOTH is trusted first — that is how every lab header prints
+    them, and requiring the pair rules out stray words like a "Age (Years) Male"
+    column heading. Only then does it fall back to the first standalone age and
+    the first standalone sex. Ages outside the adult range are ignored rather than
+    guessed at, so the form asks the user instead.
+    """
+    first_age = first_sex = None
+    for raw in lines:
+        line = raw.strip()
+        if not line or len(line) > 120:
+            continue
+        age, sex = _demographics_from_line(line)
+        if age is not None and sex is not None:
+            return {"age": age, "sex": sex}
+        first_age = first_age if first_age is not None else age
+        first_sex = first_sex or sex
+
+    out = {}
+    if first_age is not None:
+        out["age"] = first_age
+    if first_sex:
+        out["sex"] = first_sex
+    return out
+
+
 @dataclass
 class ParseResult:
     biomarkers: dict[str, float] = field(default_factory=dict)
@@ -266,8 +331,14 @@ def _parse_pdf(data: bytes) -> ParseResult:
         return ParseResult(notes=["No text found in PDF (it may be a scanned image). "
                                   "Enter values manually or upload CSV/JSON."])
 
-    found, conversions = extract_biomarkers_from_lines(text.splitlines())
+    lines = text.splitlines()
+    found, conversions = extract_biomarkers_from_lines(lines)
+    demographics = extract_demographics(lines)
     notes = [f"Best-effort extraction found {len(found)} value(s). PDF layouts vary — "
              "please review every value before use."]
+    if demographics:
+        read = ", ".join(f"{k} {v}" for k, v in demographics.items())
+        notes.append(f"Read patient details from the report header ({read}). "
+                     "Correct them in the sidebar if they are wrong.")
     notes.extend(conversions)
-    return ParseResult(biomarkers=found, notes=notes)
+    return ParseResult(biomarkers=found, demographics=demographics, notes=notes)
