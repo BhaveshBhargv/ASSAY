@@ -29,7 +29,14 @@ ALL_CODES: list[str] = [code for _p, codes in PANELS for code in codes]
 # Lab-report name variants for best-effort PDF extraction. Longest/most specific
 # first; single-letter electrolyte symbols are intentionally omitted (too noisy).
 SYNONYMS: dict[str, list[str]] = {
-    "hba1c_pct": ["hba1c", "hemoglobin a1c", "haemoglobin a1c", "glycated haemoglobin", "a1c"],
+    # NB: the "…glycosylated/glycated haemoglobin" spellings MUST be listed (and are
+    # longer than plain "haemoglobin"), otherwise a label like
+    # "Glycosylated Hemoglobin (HbA1c)" resolves to `hemoglobin`. LABEL_PRIORITY
+    # below is the belt-and-braces guard for the same collision.
+    "hba1c_pct": ["glycosylated haemoglobin", "glycosylated hemoglobin",
+                  "glycated haemoglobin", "glycated hemoglobin",
+                  "glycohaemoglobin", "glycohemoglobin",
+                  "haemoglobin a1c", "hemoglobin a1c", "hba1c", "a1c"],
     "fasting_glucose_mgdl": ["fasting blood glucose", "fasting glucose", "glucose fasting",
                              "blood glucose", "glucose", "fbg", "fbs"],
     "total_chol_mgdl": ["total cholesterol", "cholesterol total", "serum cholesterol", "cholesterol"],
@@ -37,13 +44,14 @@ SYNONYMS: dict[str, list[str]] = {
     "hdl_mgdl": ["hdl cholesterol", "hdl-c", "hdl"],
     "triglycerides_mgdl": ["triglycerides", "triglyceride", "trig"],
     "hemoglobin": ["haemoglobin", "hemoglobin", "hgb", "hb"],
-    "hematocrit": ["haematocrit", "hematocrit", "hct", "pcv"],
+    "hematocrit": ["packed cell volume", "haematocrit", "hematocrit", "hct", "pcv"],
     "rbc": ["red blood cell count", "red blood cells", "rbc count", "erythrocyte", "rbc"],
     "mcv": ["mean corpuscular volume", "mcv"],
     "mchc": ["mean corpuscular haemoglobin concentration", "mean corpuscular hemoglobin concentration", "mchc"],
     "mch": ["mean corpuscular haemoglobin", "mean corpuscular hemoglobin", "mch"],
     "rdw": ["red cell distribution width", "rdw-cv", "rdw"],
-    "wbc": ["white blood cell count", "white blood cells", "wbc count", "leukocyte", "leucocyte", "wbc"],
+    "wbc": ["total leucocyte count", "total leukocyte count", "white blood cell count",
+            "white blood cells", "wbc count", "leukocyte", "leucocyte", "wbc", "tlc"],
     "platelets": ["platelet count", "platelets", "platelet", "plt"],
     "alt": ["alanine aminotransferase", "alt/sgpt", "sgpt", "alt"],
     "ast": ["aspartate aminotransferase", "ast/sgot", "sgot", "ast"],
@@ -61,6 +69,12 @@ SYNONYMS: dict[str, list[str]] = {
     "vitamin_d": ["25-hydroxyvitamin d", "25-oh vitamin d", "25(oh)d", "vitamin d3", "vitamin d",
                   "cholecalciferol"],
 }
+
+
+# Codes that must win when a label also contains a broader analyte's name.
+# "Glycosylated Hemoglobin (HbA1c)" is HbA1c, never haemoglobin — resolved by
+# priority first, then by longest matching term.
+LABEL_PRIORITY: dict[str, int] = {"hba1c_pct": 2}
 
 
 @lru_cache(maxsize=1)

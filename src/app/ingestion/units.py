@@ -13,6 +13,8 @@ the printed value to reach the canonical unit.
 """
 from __future__ import annotations
 
+import re
+
 # Canonical unit per biomarker (normalised token form).
 CANON_UNIT: dict[str, str] = {
     "hba1c_pct": "%", "fasting_glucose_mgdl": "mg/dl", "total_chol_mgdl": "mg/dl",
@@ -84,13 +86,36 @@ _UNIT_ALIASES: list[tuple[str, str]] = sorted([
 ], key=lambda t: -len(t[0]))
 
 
-def detect_unit(rest: str) -> str:
-    """Normalised unit token that the text immediately after a value starts with."""
-    s = rest.lower().replace("µ", "u").replace("μ", "u").replace(" ", "")
+# Abnormality markers labs print between the value and its unit ("10.7 L* g/dL",
+# "167.9 H mg/dL", "12.6 H* 10^3/µl"). They must be stripped before unit matching,
+# otherwise every FLAGGED result — precisely the clinically interesting ones — is
+# read as having no unit and silently dropped.
+_FLAG_TOKEN = re.compile(r"^\s*(?:\*+|[HL]\*?|HIGH|LOW|ABNORMAL|BORDERLINE)(?=\s)", re.I)
+
+
+def _normalise(rest: str) -> str:
+    return rest.lower().replace("µ", "u").replace("μ", "u").replace(" ", "")
+
+
+def _leading_unit(s: str) -> str:
     for spelling, norm in _UNIT_ALIASES:
         if s.startswith(spelling):
             return norm
     return ""
+
+
+def detect_unit(rest: str) -> str:
+    """Normalised unit token that the text immediately after a value starts with.
+
+    If nothing matches, one leading abnormality flag is stripped and the match is
+    retried, so "10.7 L* g/dL" reads as g/dl. The flag is only stripped when a
+    space follows it, so genuine units ("l/l") are never mistaken for a flag.
+    """
+    unit = _leading_unit(_normalise(rest))
+    if unit:
+        return unit
+    unflagged = _FLAG_TOKEN.sub("", rest, count=1)
+    return _leading_unit(_normalise(unflagged)) if unflagged != rest else ""
 
 
 def to_canonical(code: str, value: float, unit: str):
