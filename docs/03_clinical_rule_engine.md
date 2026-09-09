@@ -135,7 +135,9 @@ src/app/domain/models.py + enums.py       (pure entities/value objects)
   "summary": {
     "overall_severity": "serious",
     "urgent_referral": true,
-    "flagged": ["hba1c_pct", "sbp_mmhg", "..."],
+    "flagged": ["hba1c_pct", "hdl_mgdl", "alt", "..."],
+    "recommendation_targets": ["hba1c_pct", "hdl_mgdl", "alt"],
+    "clinician_signpost": ["potassium"],
     "status_counts": {"high": 4, "borderline": 4, "low": 1, "severe": 1},
     "unknown_codes": []
   }

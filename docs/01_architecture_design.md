@@ -393,7 +393,7 @@ erDiagram
 | **ORM** | SQLAlchemy 2.0 + Alembic | Repository pattern + migrations = reproducible schema, clean separation of persistence from domain. |
 | **Training data** | **NHANES** | Large, public, de-identified US population survey with labs + demographics + outcomes — ideal for training the combinatorial RF and defensible in an ethics review (no bespoke patient data collection). |
 | **Testing** | pytest + coverage | Unit tests per stage (contracts make this trivial), integration tests for the pipeline. |
-| **Packaging/Deploy** | Docker + docker-compose | Reproducible environment (API + DB + vector index). Deploy target: HF Spaces / Render / a VM. |
+| **Packaging/Deploy** | ~~Docker + docker-compose~~ → **local Python application** | *Revised in Phase 10.* With no database and no vector service, the "stack" is one process per interface, so containers orchestrated nothing and mostly packaged PyTorch. Reproducibility is carried instead by pinned dependency floors, committed model/index artefacts, a fixed seed, and CI that installs from scratch. See `10_deployment.md` §5. |
 | **Config/secrets** | pydantic-settings + `.env` | Keys never hardcoded; environment-driven config supports Dependency Inversion at the boundary. |
 | **Experiment tracking (optional)** | MLflow | Logs RF metrics, model versions, and RAG eval runs — strengthens the dissertation's reproducibility chapter. |
 
@@ -432,9 +432,8 @@ Clean-architecture layout; dependencies point inward. `domain` imports nothing e
 ```
 blood-test-lifestyle-recommender/
 ├── README.md
-├── pyproject.toml / requirements.txt
-├── docker-compose.yml
-├── .env.example
+├── requirements.txt
+├── Makefile
 ├── docs/
 │   ├── 01_architecture_design.md   ← this document
 │   ├── diagrams/                   ← exported mermaid/PNG
@@ -532,7 +531,7 @@ blood-test-lifestyle-recommender/
 | 9 | **Latency** (OCR + RF + embedding + retrieval + LLM) | Poor UX | Load model/index at startup; run Rules and RF in parallel; cache embeddings of the fixed corpus; stream LLM output. |
 | 10 | **Data privacy / ethics** | Handling health data | Pseudonymize; store no direct identifiers; NHANES is de-identified/public; explicit consent + disclaimer in UI; document in the ethics chapter. |
 | 11 | **Evaluation of a generative system** | Hard to grade "good advice" objectively | Multi-pronged (Phase 9): RF classification metrics; RAG retrieval metrics (recall@k, MRR); groundedness/faithfulness scoring; and a small clinician/rubric-based human eval. |
-| 12 | **Reproducibility for examiners** | "Works on my machine" | Docker-compose for the whole stack; pinned deps; versioned model + index artifacts; optional MLflow tracking. |
+| 12 | **Reproducibility for examiners** | "Works on my machine" | Pinned dependency floors; the trained model and FAISS index committed to the repo so a clean clone runs immediately; fixed random seed through data prep and training; CI that installs from scratch and runs all 63 tests on every push. |
 
 ---
 
@@ -545,6 +544,26 @@ blood-test-lifestyle-recommender/
 | 3. Two outputs merge into one final severity label | `domain/services/fusion.py`; `risk_assessment.final_severity` + `fusion_rationale` |
 | 4. RAG retrieves guidelines based on that final label | `rag/retriever.py`; query built from `final_severity` + flags |
 | 5. LLM generates explanation | `application/use_cases/generate_recommendation.py`; `recommendation` + `recommendation_citation` |
+
+---
+
+## 11a. As-built deviations from this design
+
+This document is the **Phase-1 design record**, kept as written so the design →
+implementation evolution stays visible. Four decisions changed during build. Each
+is recorded here so the document is not read as a description of the finished
+system.
+
+| Designed | As built | Why |
+|---|---|---|
+| **PostgreSQL + SQLAlchemy + Alembic**, with the audit-trail schema in §6 (`risk_assessment`, `rule_flag`, `rf_prediction`, `recommendation`, `recommendation_citation`) | **No database.** The system is stateless: a request is assessed, answered, and forgotten | Nothing needed to persist. No user accounts, no history feature, no longitudinal comparison. A schema with no reader is cost without benefit — and storing health records would have widened the ethics footprint for no functional gain. The audit trail survives *in the response*: every assessment carries its rule flags, RF probabilities, SHAP drivers, evidence citations and groundedness score. |
+| **Docker + docker-compose**, deploy to HF Spaces / Render / VM | **Local Python application** | See §7 and `10_deployment.md` §5. |
+| **MLflow** experiment tracking | **Metadata sidecar + committed reports** | `rf_model_metadata.json` records best params, CV score, feature names, label order and training size; `reports/phase4` and `reports/phase9` hold the metrics and plots. Sufficient for one model with one training run. |
+| `application/use_cases/` layer | Folded into **`recommend/engine.py`** | The orchestrator is a single class (`RecommendationEngine`). A dedicated use-case package for one collaborator was indirection without separation. |
+
+The dependency rule, the five-stage contract, the ports-and-adapters boundaries
+and the layered structure all survived unchanged — those are what the design was
+for.
 
 ---
 

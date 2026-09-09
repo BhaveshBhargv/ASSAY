@@ -110,9 +110,8 @@ and the disclaimer.
 - **Live server** (uvicorn): all six paths in `/openapi.json`; `/predict` →
   `serious`; `/model-info` → ruleset 1.1, RF macro-F1 0.868, RAG 32/all-MiniLM-L6-v2,
   27 biomarkers; `/recommend` → 502 `llm_unavailable` with `X-Request-ID`.
-- No regressions: 40/40 tests across all phases. The shared biomarker
+- No regressions: **63/63 tests** across all phases. The shared biomarker
   catalog/parser were lifted into `app.ingestion` (used by both the API and the
   dashboard); Streamlit still imports and runs.
 
-**Phase 7 exit criteria met.** Remaining: Phase 9 (evaluation & explainability),
-10 (deployment), 11 (dissertation write-up).
+**Phase 7 exit criteria met.** Remaining: Phase 11 (dissertation write-up).

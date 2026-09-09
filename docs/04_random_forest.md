@@ -156,4 +156,6 @@ engine + clinician signposting.
    detector, never diagnostic (thresholds owned by the rule engine).
 4. **Unweighted training** (survey weights not applied) — documented Phase-2 choice.
 
-**Phase 4 exit criteria met — ready for Phase 5 (RAG knowledge base) on approval.**
+**Phase 4 exit criteria met.** The trained model and its metadata sidecar are
+committed to `src/app/ml/registry/`, so the application runs without retraining;
+Phase 9 re-evaluates the same artefact into `reports/phase9/`.

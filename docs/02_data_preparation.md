@@ -18,10 +18,10 @@
 | **Sample** | Full (non-fasting) sample; HbA1c as glycaemic marker | Keeps the full ~30k sample instead of collapsing to the fasting subsample. |
 | **Blood biomarkers — mandatory** (drop if missing) | HbA1c, total cholesterol, HDL | Full-sample blood analytes; label-defining, can't fabricate ground truth. |
 | **Blood biomarkers — supplementary** (imputed) | Triglycerides, LDL, fasting glucose | Fasting-subsample blood analytes; used in Layer-1 *only when observed*. |
-| **Clinical measurements — optional** (imputed, never dropped) | SBP, DBP, BMI, waist | NOT on a blood report — provided separately (UI/demographics). Used by the rule engine/model *when present*; absence never drops a row. Keeps cardiometabolic signal while honouring the blood-report scope. |
+| **Clinical measurements** | SBP, DBP, BMI, waist — **not ingested** | Not blood tests, and unavailable from a report at inference. Removed from the file registry entirely rather than imputed; weight and blood pressure are signposted to a GP. See §3 and §10. |
 | **Missing values** | Hybrid: drop-if-mandatory-missing, median-impute supplementary + soft predictors | Balances integrity and retention. |
 | **Target label** | 3-layer scheme → `Normal / Borderline / Serious` | See §4. Layer 2 is the project's novelty. |
-| **RF features** | Biomarkers + demographics **only** | Diagnosis/med vars are label-only → no leakage. |
+| **RF features** | Blood analytes + **age and sex only** | Diagnosis/medication vars are label-only → no leakage. Socio-demographics dropped: absent from a blood report and not lifestyle-actionable. See §6. |
 | **Outliers** | Plausibility→NaN, then winsorise 1st/99th pct | Removes data errors, tames real extremes, deletes no rows. |
 | **Scaling** | Unscaled matrix for RF **+** train-fit StandardScaler copy | Trees are scale-invariant; scaled copy kept for distance-based use. |
 | **Encoding** | One-hot sex & ethnicity; ordinal education/BMI/age bands | Avoids false ordinality on nominal variables. |
@@ -41,8 +41,9 @@ Naming differs by cycle (`_H`, `_I`, `P_`); the loader resolves this automatical
 | HDL | `HDL` | `LBDHDD` |
 | Triglycerides / LDL | `TRIGLY` | `LBXTR`, `LBDLDL` (fasting) |
 | Fasting glucose | `GLU` | `LBXGLU` (fasting) |
-| Body measures | `BMX` | BMI, waist, height, weight |
-| Blood pressure | `BPX` (13–16) / `BPXO` (17–20) | systolic/diastolic replicates |
+| Complete blood count | `CBC` | `LBXHGB`, `LBXHCT`, `LBXRBCSI`, `LBXMCVSI`, `LBXMCHSI`, `LBXMC`, `LBXRDW`, `LBXWBCSI`, `LBXPLTSI` |
+| Biochemistry (liver / kidney / electrolytes) | `BIOPRO` | `LBXSATSI`, `LBXSASSI`, `LBXSAPSI`, `LBXSAL`, `LBXSTB`, `LBXSCR`, `LBXSBU`, `LBXSNASI`, `LBXSKSI`, `LBXSCLSI`, `LBXSCA` |
+| Vitamin D | `VID` | `LBXVIDMS` — 2013–16 only; absent in the `P_` cycle, skipped gracefully |
 | Diabetes Q | `DIQ` | `DIQ010/050/070` — **label-only** |
 | BP/cholesterol Q | `BPQ` | `BPQ080/090D/020/040A` — **label-only** |
 | Medical conditions | `MCQ` | `MCQ160C/E/F` — **label-only** |
@@ -50,14 +51,25 @@ Naming differs by cycle (`_H`, `_I`, `P_`); the loader resolves this automatical
 
 ---
 
-## 3. Two NHANES-specific reconciliations
+## 3. NHANES-specific reconciliations
 
-**Blood-pressure methodology break** (`bp_harmonize.py`). 2013–16 used manual
-auscultation (`BPXSY/DI 1–4`); 2017–20 used oscillometric devices
-(`BPXOSY/ODI 1–3`). We average replicate readings per person (undetectable
-diastolic `0` → missing first), emit a single `sbp_mmhg`/`dbp_mmhg`, and keep a
-`bp_method` flag so the methodology effect can be audited rather than silently
-absorbed.
+**Body measures and blood pressure are not pulled at all.** `BMX` and
+`BPX`/`BPXO` were ingested in an early revision, which forced a methodology
+reconciliation between the manual auscultation used in 2013–16 (`BPXSY/DI 1–4`)
+and the oscillometric devices used in 2017–20 (`BPXOSY/ODI 1–3`). Once the study
+scope was fixed to a **blood-test report**, these stopped being inputs the system
+could ever receive at inference, so they were dropped from the file registry
+(`config/nhanes_files.yaml`) and the harmonisation step was deleted with them.
+Weight and blood pressure are signposted to a GP instead — a documented
+limitation, and the change also improved label quality (see §10).
+
+**Cycle naming.** Components are suffixed `_H` (2013–14) and `_I` (2015–16) but
+prefixed `P_` for the 2017–20 pre-pandemic release. `Cycle.filename()` resolves
+this from config, so adding a cycle needs no code change.
+
+**Survey-weight naming.** The MEC weight is `WTMEC2YR` in the two-year cycles and
+`WTMECPRP` in the pre-pandemic release; `load_component` harmonises both to
+`wtmec`.
 
 **Fasting-subsample problem.** Fasting glucose, triglycerides, and LDL exist
 only in the morning fasting subsample (~⅔ missing sample-wide). Making them
@@ -116,13 +128,30 @@ genuinely observed biomarkers.
 
 ## 6. Feature set produced (27 columns)
 
-Continuous: `age, pir, hba1c_pct, total_chol_mgdl, hdl_mgdl, sbp_mmhg, dbp_mmhg,
-bmi, waist_cm, triglycerides_mgdl, ldl_mgdl, fasting_glucose_mgdl` + engineered
-`tc_hdl_ratio, tg_hdl_ratio, waist_to_height, tyg_index`.
-Ordinal: `educ_code, bmi_category, age_band`.
-One-hot: `sex_1/2`, `eth_1/2/3/4/6/7`.
-**Excluded from features:** all `diq_*`, `bpq_*`, `mcq_*`, `statin_or_metformin`
-(label-only) and `psu/strata/wtmec/cycle` (design/provenance).
+The model is deliberately **clinical-only** — biomarkers plus age and sex. A blood
+report does not carry socio-demographics, and they are not lifestyle-actionable,
+so ethnicity, income ratio and education were dropped as features.
+
+**Continuous (24):** `age` + the 20 actionable blood analytes
+(`hba1c_pct, fasting_glucose_mgdl, total_chol_mgdl, ldl_mgdl, hdl_mgdl,
+triglycerides_mgdl, hemoglobin, hematocrit, rbc, mcv, mch, mchc, rdw, alt, ast,
+alp, albumin, total_bilirubin, creatinine, bun`) + engineered
+`tc_hdl_ratio, tg_hdl_ratio, tyg_index`.
+**Ordinal (1):** `age_band`.
+**One-hot (2):** `sex_1`, `sex_2`.
+
+**Excluded from features:**
+
+| Excluded | Reason |
+|---|---|
+| `diq_*`, `bpq_*`, `mcq_*`, `statin_or_metformin` | label-only — leakage control |
+| `psu`, `strata`, `wtmec`, `cycle` | survey design / provenance |
+| `vitamin_d` | structurally missing for a whole cycle |
+| `wbc`, `platelets`, `sodium`, `potassium`, `chloride`, `calcium` | flag-only markers — reported and escalated by the rule engine, never modelled or advised on |
+| `eth_code`, `pir`, `educ_code` | not on a blood report, not lifestyle-actionable |
+
+This list is the authoritative one: it matches `feature_names` in
+`src/app/ml/registry/rf_model_metadata.json`, which the trained model carries.
 
 ---
 
@@ -133,8 +162,7 @@ One-hot: `sex_1/2`, `eth_1/2/3/4/6/7`.
 | `config.py` | Paths, canonical variable map, feature/label column contract, YAML loaders |
 | `download.py` | Fetch `.XPT` for all cycles (idempotent, per-cycle naming) |
 | `load.py` | Read `.XPT` → pandas, canonical rename, weight harmonisation |
-| `bp_harmonize.py` | Reconcile manual vs oscillometric blood pressure |
-| `merge.py` | Join components on SEQN per cycle, concat cycles, RXQ flag |
+| `merge.py` | Join components on SEQN per cycle, concat cycles, RXQ statin/metformin flag |
 | `labeling.py` | Three-layer target construction + novelty tracking |
 | `outliers.py` | Plausibility → NaN; train-fit winsorisation |
 | `missing.py` | Hybrid drop + train-fit imputation |

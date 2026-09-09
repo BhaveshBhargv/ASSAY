@@ -97,4 +97,5 @@ demographics + biomarkers
   zero diagnostic violations.
 - No regressions: rule engine 19/19, RAG 5/5, ML smoke 1/1.
 
-**Phase 6 exit criteria met — ready for Phase 7 (FastAPI backend) on approval.**
+**Phase 6 exit criteria met.** Phase 7 (FastAPI backend) now wraps this same
+engine — see `07_fastapi_backend.md`.

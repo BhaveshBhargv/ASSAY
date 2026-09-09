@@ -90,7 +90,7 @@ they're parsed (pypdf), chunked, and indexed alongside the curated corpus.
 
 | File | Responsibility |
 |---|---|
-| `models.py` | `GuidelineChunk`, `RetrievalResult`, `RetrievalQuery` (+ `citation()`) |
+| `models.py` | `GuidelineChunk`, `RetrievalResult` (+ `citation()` for provenance) |
 | `ports.py` | `IEmbedder`, `IVectorStore` abstractions |
 | `embedder.py` | SentenceTransformer adapter (normalised embeddings) |
 | `vector_store.py` | FAISS adapter (`IndexFlatIP` + `IDMap2`, save/load) |

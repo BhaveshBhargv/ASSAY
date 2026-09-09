@@ -1,16 +1,15 @@
 # Convenience commands. Usage: `make <target>`  (needs GNU make; on Windows use WSL/Git Bash)
-.PHONY: help install test lint api dashboard build-index train eval docker-up docker-down
+.PHONY: help install test lint api dashboard build-index train eval
 
 help:
 	@echo "install       install Python dependencies"
 	@echo "test          run all test suites"
+	@echo "lint          ruff over src, streamlit_app, scripts, tests"
 	@echo "api           run the FastAPI backend (:8000, docs at /docs)"
-	@echo "dashboard     run the Streamlit dashboard (:8502)"
+	@echo "dashboard     run the Streamlit dashboard (:8501)"
 	@echo "build-index   (re)build the RAG FAISS index"
 	@echo "train         train + evaluate the Random Forest"
 	@echo "eval          run the Phase-9 system evaluation"
-	@echo "docker-up     build + run API and dashboard via docker compose"
-	@echo "docker-down   stop the compose stack"
 
 install:
 	pip install -r requirements.txt
@@ -41,9 +40,3 @@ train:
 
 eval:
 	python scripts/evaluate_system.py
-
-docker-up:
-	docker compose up --build
-
-docker-down:
-	docker compose down
