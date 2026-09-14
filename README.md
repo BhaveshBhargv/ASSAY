@@ -11,6 +11,10 @@ MSc Advanced Data Science dissertation project by Bhavesh Bhargava.
 
 ---
 
+Live Demo: [ASSAY](https://bb-assay.streamlit.app/)
+
+---
+
 ## How it works
 
 A blood panel goes through five steps:
