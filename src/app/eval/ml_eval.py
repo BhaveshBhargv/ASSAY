@@ -1,10 +1,7 @@
-"""
-ml_eval.py — machine-learning metrics + explainability (Phase 9).
+"""ML metrics and feature importance for the evaluation report.
 
-Reuses the Phase-4 `evaluate` (accuracy / precision / recall / F1 / ROC-AUC,
-confusion matrix, ROC curves, novelty slice) and `explain` (SHAP + Gini
-importance), writing all artefacts into reports/phase9, and adds a single
-headline-metrics bar chart.
+Reuses evaluate() and explain() from app.ml, writes their output to
+reports/phase9 and adds a chart of the headline metrics.
 """
 from __future__ import annotations
 

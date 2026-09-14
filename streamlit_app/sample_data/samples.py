@@ -1,10 +1,4 @@
-"""
-samples.py — built-in demo patients so the app is usable with one click.
-
-Values are illustrative (de-identified, not real people). The metabolic case is
-the classic cluster the pipeline is designed to catch; the healthy case shows the
-low-risk path.
-"""
+"""Sample patients for the sidebar. The values are made up, not taken from real people."""
 from __future__ import annotations
 
 SAMPLES: dict[str, dict] = {

@@ -1,9 +1,4 @@
-"""
-models.py — RAG domain value objects.
-
-A GuidelineChunk is one retrievable passage of evidence-based guidance with full
-provenance (source + code + URL) so every downstream recommendation can be cited.
-"""
+"""Guideline passages and retrieval results."""
 from __future__ import annotations
 
 from dataclasses import asdict, dataclass, field
@@ -13,12 +8,12 @@ from dataclasses import asdict, dataclass, field
 class GuidelineChunk:
     chunk_id: str
     text: str
-    source: str                       # NICE | NHS | WHO
-    code: str = ""                    # e.g. NG28, CG181, "Vitamin D"
+    source: str  # NICE, NHS or WHO
+    code: str = ""  # e.g. NG28, CG181
     title: str = ""
-    biomarkers: tuple[str, ...] = ()  # canonical codes this passage relates to
-    categories: tuple[str, ...] = ()  # diet | physical_activity | alcohol | ...
-    severities: tuple[str, ...] = ()  # normal | borderline | serious | all
+    biomarkers: tuple[str, ...] = ()  # biomarker codes the passage is about
+    categories: tuple[str, ...] = ()  # diet, physical_activity, alcohol, ...
+    severities: tuple[str, ...] = ()  # normal, borderline, serious or all
     url: str = ""
 
     def citation(self) -> str:

@@ -1,9 +1,7 @@
-"""
-test_recommend.py — Phase 6 tests (fully offline).
+"""Recommendation pipeline tests.
 
-Everything runs without a network or a running LLM: a FakeProvider returns canned
-JSON, and a fake retriever supplies a fixed evidence pack. This exercises the full
-fuse -> prompt -> parse -> guard -> render pipeline plus the safety guards.
+These run offline: FakeProvider returns canned JSON and a fake retriever returns
+fixed evidence. They cover fusion, parsing, the guards and rendering.
 
 Run:  python tests/test_recommend.py
 """
@@ -16,19 +14,17 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from app.domain.models import PatientContext                       # noqa: E402
-from app.domain.services.rule_engine import RuleEngine             # noqa: E402
-from app.rag.models import GuidelineChunk, RetrievalResult         # noqa: E402
-from app.recommend.engine import RecommendationEngine              # noqa: E402
-from app.recommend.fusion import fuse                              # noqa: E402
+from app.domain.models import PatientContext  # noqa: E402
+from app.domain.services.rule_engine import RuleEngine  # noqa: E402
+from app.rag.models import GuidelineChunk, RetrievalResult  # noqa: E402
+from app.recommend.engine import RecommendationEngine  # noqa: E402
+from app.recommend.fusion import fuse  # noqa: E402
 from app.recommend.generator import _extract_json, generate_report  # noqa: E402
-from app.recommend.guards import scan_diagnostic, verify           # noqa: E402
-from app.recommend.prompt import build_evidence_pack               # noqa: E402
-from app.recommend.providers import FakeProvider                   # noqa: E402
-from app.recommend.report import RecommendationReport              # noqa: E402
-from app.rules.loader import load_ruleset                          # noqa: E402
-
-# --- fixtures -------------------------------------------------------------- #
+from app.recommend.guards import scan_diagnostic, verify  # noqa: E402
+from app.recommend.prompt import build_evidence_pack  # noqa: E402
+from app.recommend.providers import FakeProvider  # noqa: E402
+from app.recommend.report import RecommendationReport  # noqa: E402
+from app.rules.loader import load_ruleset  # noqa: E402
 
 _EVIDENCE = [
     RetrievalResult(chunk=GuidelineChunk(
@@ -41,8 +37,8 @@ _EVIDENCE = [
         biomarkers=("hdl_mgdl", "total_chol_mgdl")), score=0.8),
 ]
 
-# Canned model output: one good item (E1), one good item (E2), one citing a
-# non-existent id (E9 -> must be dropped), one with no rationale (must be dropped).
+# Canned model output. The item citing E9 (which doesn't exist) and the one with
+# an empty rationale should both be dropped by the guard.
 _CANNED = json.dumps({
     "explanation": "Your results show a higher HbA1c with low HDL, a pattern linked "
                    "to raised cardiometabolic risk. This is not a diagnosis.",
@@ -67,12 +63,10 @@ class _FakeRetriever:
         return _EVIDENCE[:k]
 
 
-# --- tests ----------------------------------------------------------------- #
-
 def test_fusion_escalates_on_rf():
     engine = RuleEngine(load_ruleset())
     ctx = PatientContext(sex="male", age=54)
-    # Normal-ish panel so rules say ~normal; RF claims 'serious' -> escalation.
+    # the rules say normal, the RF says serious
     rule_result = engine.evaluate({"hba1c_pct": 5.2, "hdl_mgdl": 60}, ctx)
     fused = fuse(rule_result, {"predicted_severity": "serious",
                                "probabilities": {"serious": 0.7}})
@@ -83,9 +77,9 @@ def test_fusion_escalates_on_rf():
 def test_fusion_safety_dominant_takes_max():
     engine = RuleEngine(load_ruleset())
     ctx = PatientContext(sex="male", age=54)
-    rule_result = engine.evaluate({"hba1c_pct": 6.1}, ctx)  # borderline by rules
+    rule_result = engine.evaluate({"hba1c_pct": 6.1}, ctx)  # borderline by the rules
     fused = fuse(rule_result, {"predicted_severity": "normal", "probabilities": {}})
-    # rules (borderline) must win over a lower RF call — never de-escalate
+    # a lower RF read never brings the severity down
     assert fused.severity == "borderline"
     assert fused.escalated_by_rf is False
 
@@ -102,18 +96,16 @@ def test_generate_report_parses_canned():
     report = generate_report(provider, "sys", "user")
     assert isinstance(report, RecommendationReport)
     assert report.explanation
-    assert len(report.diet) == 2  # before guard
+    assert len(report.diet) == 2  # nothing dropped yet
 
 
 def test_guard_drops_ungrounded_and_unexplained():
     report = generate_report(FakeProvider(_CANNED), "s", "u")
     evidence = build_evidence_pack(_EVIDENCE)
     cleaned, audit = verify(report, evidence)
-    # E9 item + empty-rationale exercise item dropped
     assert len(cleaned.diet) == 1
     assert cleaned.exercise == []
     assert len(audit.dropped_items) == 2
-    # 3 grounded of 5 total (E9 citation + empty-rationale item dropped)
     assert audit.total_items == 5 and audit.grounded_items == 3
     assert 0 < audit.groundedness < 1
 
@@ -130,7 +122,7 @@ def test_engine_end_to_end_offline():
         rule_engine=RuleEngine(load_ruleset()),
         retriever=_FakeRetriever(),
         provider=FakeProvider(_CANNED),
-        risk_adapter=None,          # rules-only, no heavy ML deps
+        risk_adapter=None,  # rules only
         k=2,
     )
     bundle = engine.recommend(
@@ -142,7 +134,7 @@ def test_engine_end_to_end_offline():
     assert "not a medical diagnosis" in bundle.disclaimer.lower()
     assert "E1" in rendered and "NICE NG28" in rendered
     assert not bundle.audit.diagnostic_violations
-    # ungrounded 'miracle supplement' advice must not survive into the report
+    # the ungrounded supplement advice shouldn't make it into the report
     assert "miracle" not in rendered.lower()
 
 

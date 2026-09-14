@@ -1,16 +1,6 @@
-"""
-engine.py — Stage 5 orchestrator: raw inputs -> grounded recommendation bundle.
+"""Runs the whole pipeline from raw inputs to a recommendation bundle.
 
-Pipeline (each step is a single-responsibility collaborator, injected for testability):
-
-    demographics + biomarkers
-        │  RuleEngine.evaluate            → per-biomarker classification
-        │  RiskAdapter.predict (optional) → RF severity + probabilities
-        ▼  fuse()                         → ONE severity + flagged/signpost split
-        │  GuidelineRetriever             → top-k cited evidence
-        ▼  build_messages + generator     → structured RecommendationReport (LLM)
-        │  guards.verify                  → non-diagnostic + groundedness pass
-        ▼  RecommendationBundle           → report + safety text + audit
+rules -> Random Forest -> fusion -> retrieval -> LLM -> guards
 """
 from __future__ import annotations
 
@@ -29,16 +19,17 @@ from .prompt import build_evidence_pack, build_messages
 
 log = logging.getLogger(__name__)
 
-# NHANES sex coding used by the feature matrix (RIAGENDR): 1 = male, 2 = female.
+# NHANES sex codes (RIAGENDR): 1 = male, 2 = female.
 _SEX_CODE = {"male": 1, "female": 2, "m": 1, "f": 2, 1: 1, 2: 2}
 
 
 class RiskAdapter:
-    """Bridges raw biomarkers -> the RF's engineered feature vector -> prediction.
+    """Builds the model's features from raw biomarkers and runs the prediction.
 
-    Rebuilds features with the same stateless Phase-2 transforms, so training and
-    inference agree. If the panel is too sparse for the model (missing values the
-    RF can't consume), prediction is skipped and fusion runs rules-only."""
+    Features are built with the same functions used in data prep, so training
+    and inference match. If prediction fails, predict returns None and fusion
+    falls back to the rules alone.
+    """
 
     def __init__(self) -> None:
         from ..ml.predict import RiskModel
@@ -48,7 +39,7 @@ class RiskAdapter:
         try:
             feats = self._build_features(demographics, biomarkers)
             return self._model.predict(feats)
-        except Exception as exc:  # noqa: BLE001 - degrade gracefully, never crash
+        except Exception as exc:  # noqa: BLE001
             log.warning("RF prediction unavailable (%s); using rules-only fusion", exc)
             return None
 
@@ -59,7 +50,7 @@ class RiskAdapter:
         from data_prep.encode_scale import build_feature_matrix
         from data_prep.features import add_features
 
-        # Clinical-only model: biomarkers + age + sex (no socio-demographics).
+        # The model only uses the biomarkers, age and sex.
         row: dict = dict(biomarkers)
         row["age"] = demographics.get("age")
         row["sex_code"] = _SEX_CODE.get(demographics.get("sex"), demographics.get("sex_code"))
@@ -86,7 +77,6 @@ class RecommendationEngine:
         self.k = k
         self.llm_recheck = llm_recheck
 
-    # ------------------------------------------------------------------ #
     @classmethod
     def build(
         cls,
@@ -96,7 +86,7 @@ class RecommendationEngine:
         llm_recheck: bool = C.LLM_ENTAILMENT_RECHECK,
         **provider_kwargs,
     ) -> "RecommendationEngine":
-        """Wire the real collaborators. `provider` may be a name or an ILLMProvider."""
+        """Create an engine with the real components. provider can be a name or a provider."""
         from ..rag.retriever import GuidelineRetriever
         from ..rules.loader import load_ruleset
 
@@ -116,7 +106,6 @@ class RecommendationEngine:
 
         return cls(rule_engine, retriever, provider, risk, k=k, llm_recheck=llm_recheck)
 
-    # ------------------------------------------------------------------ #
     def recommend(self, demographics: dict, biomarkers: dict) -> RecommendationBundle:
         context = PatientContext(
             sex=demographics.get("sex"), age=demographics.get("age")

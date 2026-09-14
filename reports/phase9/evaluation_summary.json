@@ -56,12 +56,176 @@
     "novelty_slice": {
       "n": 306,
       "description": "records upgraded by Layer-2 (bloods normal/borderline, diagnosis/medication indicated higher risk)",
-      "risk_detected_rate": 0.7222222222222222,
-      "exact_label_accuracy": 0.18627450980392157,
+      "true_class_distribution": {
+        "normal": 0,
+        "borderline": 127,
+        "serious": 179
+      },
+      "risk_detected_rate": 0.7222,
+      "exact_label_accuracy": 0.1863,
       "predicted_class_distribution": {
         "normal": 85,
         "borderline": 211,
         "serious": 10
+      },
+      "model": {
+        "exact_accuracy": 0.1863,
+        "exact_accuracy_ci95": [
+          0.1466,
+          0.2337
+        ],
+        "risk_detected_rate": 0.7222,
+        "predicted_distribution": {
+          "normal": 85,
+          "borderline": 211,
+          "serious": 10
+        }
+      },
+      "baselines": {
+        "constant_normal": {
+          "exact_accuracy": 0.0,
+          "exact_accuracy_ci95": [
+            0.0,
+            0.0124
+          ],
+          "risk_detected_rate": 0.0,
+          "predicted_distribution": {
+            "normal": 306,
+            "borderline": 0,
+            "serious": 0
+          }
+        },
+        "constant_borderline": {
+          "exact_accuracy": 0.415,
+          "exact_accuracy_ci95": [
+            0.3612,
+            0.471
+          ],
+          "risk_detected_rate": 1.0,
+          "predicted_distribution": {
+            "normal": 0,
+            "borderline": 306,
+            "serious": 0
+          }
+        },
+        "constant_serious": {
+          "exact_accuracy": 0.585,
+          "exact_accuracy_ci95": [
+            0.529,
+            0.6388
+          ],
+          "risk_detected_rate": 1.0,
+          "predicted_distribution": {
+            "normal": 0,
+            "borderline": 0,
+            "serious": 306
+          }
+        },
+        "stratified_random": {
+          "exact_accuracy": 0.4227,
+          "exact_accuracy_ci95": [
+            0.3725,
+            0.4771
+          ],
+          "note": "2000 draws from the training class prior"
+        }
+      },
+      "vs_best_constant": {
+        "baseline": "constant_serious",
+        "baseline_exact_accuracy": 0.585,
+        "model_correct_baseline_wrong": 47,
+        "model_wrong_baseline_correct": 169,
+        "mcnemar_exact_p": 2.373e-17,
+        "model_beats_baseline": false
+      },
+      "metric_caveat": "risk_detected_rate is degenerate on this slice: it contains no true 'normal' records by construction, so any constant non-normal predictor scores 1.0. Compare exact_accuracy against `baselines`.",
+      "strata": {
+        "analyte_lowering_rx": {
+          "n": 184,
+          "model_exact_accuracy": 0.1739,
+          "model_exact_accuracy_ci95": [
+            0.126,
+            0.2352
+          ],
+          "best_constant": "serious",
+          "best_constant_exact_accuracy": 0.7663,
+          "best_constant_ci95": [
+            0.7001,
+            0.8216
+          ],
+          "gap_vs_best_constant": -0.5924,
+          "model_called_normal": 21,
+          "true_distribution": {
+            "normal": 0,
+            "borderline": 43,
+            "serious": 141
+          },
+          "bloods_read_normal_rate": 0.2935
+        },
+        "bp_rx_only_control": {
+          "n": 70,
+          "model_exact_accuracy": 0.2714,
+          "model_exact_accuracy_ci95": [
+            0.1812,
+            0.3854
+          ],
+          "best_constant": "borderline",
+          "best_constant_exact_accuracy": 0.7429,
+          "best_constant_ci95": [
+            0.6297,
+            0.8307
+          ],
+          "gap_vs_best_constant": -0.4714,
+          "model_called_normal": 33,
+          "true_distribution": {
+            "normal": 0,
+            "borderline": 52,
+            "serious": 18
+          },
+          "bloods_read_normal_rate": 0.7714
+        },
+        "no_medication": {
+          "n": 52,
+          "model_exact_accuracy": 0.1154,
+          "model_exact_accuracy_ci95": [
+            0.054,
+            0.2297
+          ],
+          "best_constant": "borderline",
+          "best_constant_exact_accuracy": 0.6154,
+          "best_constant_ci95": [
+            0.4796,
+            0.7353
+          ],
+          "gap_vs_best_constant": -0.5,
+          "model_called_normal": 31,
+          "true_distribution": {
+            "normal": 0,
+            "borderline": 32,
+            "serious": 20
+          },
+          "bloods_read_normal_rate": 0.6923
+        },
+        "independence_test": {
+          "contingency_correct_by_stratum": [
+            [
+              32,
+              152
+            ],
+            [
+              25,
+              97
+            ]
+          ],
+          "fisher_exact_p": 0.5494,
+          "accuracy_differs_by_stratum": false
+        },
+        "verdict": {
+          "hypothesis": "medication normalises the measured analytes, erasing the signal the model must recover",
+          "unmedicated_minus_medicated": -0.0585,
+          "supported": false,
+          "reading": "Unmedicated records are NOT recovered more accurately, so treatment-induced normalisation does not explain the failure. See `rule_agreement` for the structural explanation that does."
+        }
       }
     },
     "top_features": [
@@ -86,7 +250,7 @@
       "recall@3": 0.4377289377289377,
       "precision@5": 0.5428571428571429,
       "recall@5": 0.5737179487179488,
-      "context_relevance_score": 0.5193881796087537,
+      "context_relevance_score": 0.5193881744997842,
       "context_tag_overlap": 0.5428571428571429
     },
     "per_query": [
@@ -111,7 +275,7 @@
         "R@3": 0.375,
         "P@5": 0.8,
         "R@5": 0.5,
-        "context_score": 0.5905398511886597,
+        "context_score": 0.5905398869514465,
         "tag_overlap": 0.8
       },
       {
@@ -171,9 +335,64 @@
         "R@3": 0.23076923076923078,
         "P@5": 0.8,
         "R@5": 0.3076923076923077,
-        "context_score": 0.5560271406173707,
+        "context_score": 0.5560270690917969,
         "tag_overlap": 0.8
       }
     ]
+  },
+  "llm": {
+    "status": "ok",
+    "provider": "openrouter:nex-agi/nex-n2.5-pro:free",
+    "aggregate": {
+      "n_reports": 5,
+      "total_items": 38,
+      "groundedness": 1.0,
+      "faithfulness_rate": 1.0,
+      "faithfulness_mean_cosine": 0.687123663331333,
+      "hallucination_rate": 0.0
+    },
+    "per_patient": [
+      {
+        "patient": "Metabolic cluster",
+        "groundedness": 1.0,
+        "faithfulness_rate": 1.0,
+        "hallucination_rate": 0.0,
+        "faithfulness_mean_cosine": 0.7021961382457188,
+        "total_items": 14
+      },
+      {
+        "patient": "Fatty-liver pattern",
+        "groundedness": 1.0,
+        "faithfulness_rate": 1.0,
+        "hallucination_rate": 0.0,
+        "faithfulness_mean_cosine": 0.6662319142084855,
+        "total_items": 13
+      },
+      {
+        "patient": "Anaemia pattern",
+        "groundedness": 1.0,
+        "faithfulness_rate": 1.0,
+        "hallucination_rate": 0.0,
+        "faithfulness_mean_cosine": 0.7305315236250559,
+        "total_items": 6
+      },
+      {
+        "patient": "Vitamin D low",
+        "groundedness": 1.0,
+        "faithfulness_rate": 1.0,
+        "hallucination_rate": 0.0,
+        "faithfulness_mean_cosine": 0.6560942232608795,
+        "total_items": 4
+      },
+      {
+        "patient": "Largely healthy",
+        "groundedness": 1.0,
+        "faithfulness_rate": 1.0,
+        "hallucination_rate": 0.0,
+        "faithfulness_mean_cosine": 0.6113723516464233,
+        "total_items": 1
+      }
+    ],
+    "failures": []
   }
 }

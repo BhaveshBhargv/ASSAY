@@ -1,20 +1,9 @@
-"""
-fusion.py — Stage 3: combine the rule engine and Random Forest into ONE label.
+"""Combines the rule engine and Random Forest results into one severity.
 
-Design (safety-dominant): the training label IS the weighted-core rule label, and
-the RF is trained to predict it. The RF earns its place on the *novelty slice* —
-cases where the individual biomarkers look normal/borderline but their pattern
-signals higher risk. So fusion escalates, never de-escalates:
-
-    final_severity = max(rule_severity, rf_severity)          # by ordinal rank
-
-When the RF is strictly higher than the rules, `escalated_by_rf` is True — this is
-the hidden-risk signal that drives the "why we still recommend caution" narrative.
-
-The fused object also splits abnormal markers into:
-    • recommendation_targets  — actionable markers → get lifestyle advice
-    • clinician_signpost      — flag-only markers  → "discuss with clinician"
-so the LLM is only ever asked to advise on markers that carry lifestyle actions.
+The final severity is the higher of the two, so the model can raise the rule
+result but never lower it. Abnormal markers are also split into actionable ones,
+which get lifestyle advice, and flag-only ones, which are referred to a
+clinician.
 """
 from __future__ import annotations
 
@@ -27,17 +16,17 @@ from ..domain.models import RuleEngineResult
 
 @dataclass
 class FusedAssessment:
-    severity: str                              # final fused label
+    severity: str  # final combined severity
     rule_severity: str
     rf_severity: Optional[str]
     rf_probabilities: dict = field(default_factory=dict)
     escalated_by_rf: bool = False
     urgent_referral: bool = False
-    # per-patient SHAP drivers of the RF read: [{feature, label, value, contribution}]
+    # SHAP drivers of the model's prediction: [{feature, label, value, contribution}]
     rf_drivers: list[dict] = field(default_factory=list)
-    # markers the LLM will advise on: [{code, name, status, severity, interpretation}]
+    # actionable abnormal markers, which the LLM gives advice on
     flagged: list[dict] = field(default_factory=list)
-    # flag-only abnormal markers → clinician signpost text, never lifestyle advice
+    # flag-only abnormal markers, which are referred to a clinician
     signpost: list[dict] = field(default_factory=list)
 
     @property
@@ -59,17 +48,14 @@ class FusedAssessment:
 
 
 def _max_severity(a: str, b: str) -> str:
-    """Ordinal max over the 3-class taxonomy (unknown labels treated as normal)."""
+    """The higher of two severity names (unknown names count as normal)."""
     ra = SEVERITY_RANK.get(Severity(a), 0) if a in Severity._value2member_map_ else 0
     rb = SEVERITY_RANK.get(Severity(b), 0) if b in Severity._value2member_map_ else 0
     return a if ra >= rb else b
 
 
 def fuse(rule_result: RuleEngineResult, rf_output: Optional[dict]) -> FusedAssessment:
-    """Merge rule-engine output with the RF prediction into one assessment.
-
-    rf_output: dict from RiskModel.predict, or None to run rules-only.
-    """
+    """Combine the rule result with the model output (None means rules only)."""
     rule_sev = rule_result.overall_severity.value
     rf_sev = rf_output.get("predicted_severity") if rf_output else None
     rf_probs = rf_output.get("probabilities", {}) if rf_output else {}
@@ -95,7 +81,7 @@ def fuse(rule_result: RuleEngineResult, rf_output: Optional[dict]) -> FusedAsses
         }
         if b.tier == "actionable":
             flagged.append(entry)
-        else:  # flag_only → clinician signpost, never lifestyle advice
+        else:  # flag_only
             signpost.append(entry)
 
     return FusedAssessment(

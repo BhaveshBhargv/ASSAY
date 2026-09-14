@@ -1,26 +1,33 @@
+# Phase 1: Architecture design
+
 **Project:** Personalized Lifestyle Recommendation System Based on Blood Test Reports Using Machine Learning, Retrieval-Augmented Generation (RAG), and Clinical Guidelines
 
-**Author:** Bhavesh Bhargava MSc Advance Data Science
+**Author:** Bhavesh Bhargava, MSc Advanced Data Science
 
 **Document version:** 1.0
 
-> **Clinical positioning (read first).** This system is **not** a diagnostic device. It produces **evidence-based lifestyle recommendations** grounded in NICE, NHS, and WHO guidance.
+This is the design written at the start of the project. It's kept as it was
+planned, and section 11a lists where the finished system differs.
+
+> The system is not a diagnostic tool. It gives lifestyle recommendations based
+> on NICE, NHS and WHO guidance.
 
 ---
 
-## 1. Design Principles
+## 1. Design principles
 
-The architecture is governed by **Clean Architecture** (dependency rule: source-code dependencies point inward, toward the domain) and **SOLID**. Concretely:
+The design follows Clean Architecture, where source code dependencies only point
+inwards towards the domain, together with the SOLID principles:
 
-| Principle | How it is applied in this system |
+| Principle | How it's applied |
 |---|---|
-| **Single Responsibility** | The Rule Engine only evaluates thresholds; the RF model only predicts combinatorial risk; the Fusion module only merges; RAG only retrieves; the LLM layer only explains. No module does two jobs. |
-| **Open/Closed** | New biomarkers or new clinical rules are added via configuration/registry, not by editing engine code. New guideline sources are added by dropping documents into the ingestion pipeline. |
-| **Liskov Substitution** | `LLMProvider`, `VectorStore`, `Retriever`, and `OCRExtractor` are abstract ports; any concrete implementation (OpenAI vs. local Llama; FAISS vs. Chroma) is interchangeable. |
-| **Interface Segregation** | Thin, purpose-specific ports (e.g., `IEmbedder`, `IReranker`) rather than one fat "AI service" interface. |
-| **Dependency Inversion** | The domain/use-case layer depends on abstractions (ports); concrete adapters (FastAPI, FAISS, OpenAI, PostgreSQL) are injected at the boundary. |
+| **Single responsibility** | Each module has one job. The rule engine checks thresholds, the Random Forest predicts combined risk, fusion merges the two, RAG retrieves, and the LLM layer explains. |
+| **Open/closed** | New biomarkers and rules are added in configuration, not in engine code. New guideline sources are added by putting documents into the ingestion step. |
+| **Liskov substitution** | `LLMProvider`, `VectorStore`, `Retriever` and `OCRExtractor` are abstract ports, so implementations can be swapped (OpenAI or a local Llama, FAISS or Chroma). |
+| **Interface segregation** | Small, specific ports such as `IEmbedder` and `IReranker` instead of one large "AI service" interface. |
+| **Dependency inversion** | The domain and use cases depend on ports. Concrete adapters (FastAPI, FAISS, OpenAI, PostgreSQL) are plugged in at the edges. |
 
-### 1.1 Layered (Clean) view
+### 1.1 Layers
 
 ```
 ┌───────────────────────────────────────────────────────────────┐
@@ -42,34 +49,44 @@ The architecture is governed by **Clean Architecture** (dependency rule: source-
 └───────────────────────────────────────────────────────────────┘
 ```
 
-**Dependency rule:** arrows point inward only. The domain knows nothing about FastAPI, FAISS, or any LLM vendor. This is what makes the model swappable and the science reproducible.
+Dependencies only point inwards. The domain doesn't know about FastAPI, FAISS or
+any LLM vendor, which is what makes the model replaceable and the results
+reproducible.
 
 ---
 
-## 2. Overall Architecture
+## 2. Overall architecture
 
-The system is a **modular pipeline behind a REST API**, with a decoupled UI. There are two "brains" that run in parallel and then converge:
+The system is a pipeline of modules behind a REST API, with a separate UI. Two
+independent checks run on each report and are then combined:
 
-1. **Deterministic path — Clinical Rule Engine.** Fires on single-biomarker threshold breaches (e.g., HbA1c ≥ 48 mmol/mol → hyperglycaemia flag). Fully explainable, guideline-cited, auditable.
-2. **Probabilistic path — Random Forest Classifier (RFC).** Catches *combinations* of borderline biomarkers that individually pass every rule but jointly indicate elevated risk (e.g., high-normal glucose + low HDL + high triglycerides + high waist → metabolic-risk pattern).
+1. **Rule engine (deterministic).** Flags any single biomarker past a threshold,
+   for example HbA1c ≥ 48 mmol/mol. Every flag can be explained and traced to a
+   guideline.
+2. **Random Forest (probabilistic).** Picks up combinations of borderline results
+   that pass every rule individually but together point to higher risk, for
+   example high-normal glucose with low HDL, high triglycerides and a large waist.
 
-These two outputs are **fused into a single final severity label**. That label drives **RAG retrieval** over a guideline knowledge base, and the retrieved evidence is handed to an **LLM** that writes patient-friendly, grounded recommendations.
+The two results are merged into one severity. That severity is used to retrieve
+passages from the guideline knowledge base, and the LLM writes patient-friendly
+recommendations from those passages.
 
-### 2.1 The five-stage contract (your core requirement, formalized)
+### 2.1 The five stages
 
 ```
-Stage 1  Rules      → per-biomarker flags     (single-threshold breaches)
-Stage 2  RFC        → combinatorial risk       (patterns no single rule catches)
-Stage 3  Fusion     → ONE final severity label (max/priority merge + rationale)
-Stage 4  RAG        → guideline chunks          (retrieved BY the final label)
-Stage 5  LLM        → grounded explanation       (recommendations from chunks)
+Stage 1  Rules    → per-biomarker flags   (single thresholds)
+Stage 2  RF       → combined risk         (patterns no single rule catches)
+Stage 3  Fusion   → one severity          (max/priority merge, with a rationale)
+Stage 4  RAG      → guideline passages    (retrieved using that severity)
+Stage 5  LLM      → recommendations       (written from the passages)
 ```
 
-Each stage has a **stable, typed contract** (a Pydantic/domain DTO). This is what lets you unit-test stages in isolation and swap implementations — the essence of the SOLID design here.
+Each stage has a typed input and output (a Pydantic or domain object), so the
+stages can be tested on their own and replaced independently.
 
 ---
 
-## 3. Component Diagram
+## 3. Component diagram
 
 ```mermaid
 graph TD
@@ -131,13 +148,14 @@ graph TD
     ORCH -->|final response| CTRL --> UI
 ```
 
-**Two subsystems, one offline, one online:**
-- **Offline (build-time):** guideline ingestion → chunking → embedding → vector index; and NHANES training → RF model → model registry.
-- **Online (request-time):** everything in the request flow (Section 8).
+The system has an offline part and an online part:
+- **Offline (build time):** guideline ingestion, chunking, embedding and indexing,
+  plus training the model on NHANES and saving it to the model registry.
+- **Online (request time):** everything in the request flow in section 8.
 
 ---
 
-## 4. Data Flow Diagram (DFD)
+## 4. Data flow
 
 ### 4.1 Level 0 (context)
 
@@ -149,7 +167,7 @@ graph LR
     NH[NHANES Dataset] -->|Training data| SYS
 ```
 
-### 4.2 Level 1 (process decomposition)
+### 4.2 Level 1 (processes)
 
 ```mermaid
 graph TD
@@ -172,22 +190,22 @@ graph TD
     D4[(PostgreSQL)] -.-> K
 ```
 
-**Key data transformations along the pipeline:**
+**What each step takes and produces:**
 
-| Step | Input | Output | Store touched |
+| Step | Input | Output | Store used |
 |---|---|---|---|
-| Ingest | PDF/image/manual form | Raw key-value biomarkers | File storage |
-| Normalize | Raw values + units | Canonical `Biomarker` objects (SI units) | Reference-range config |
+| Ingest | PDF, image or manual form | Raw biomarker names and values | File storage |
+| Normalize | Raw values and units | `Biomarker` objects in canonical (SI) units | Reference range config |
 | Rules | Canonical biomarkers | List of `RuleFlag` | Rule registry |
-| RFC | Feature vector | `risk_class` + probability | Model registry |
-| Fusion | RuleFlags + RFC output | One `SeverityLabel` + rationale | — |
-| RAG | Label + flags | Top-k `GuidelineChunk` | Vector index |
-| LLM | Chunks + patient context | `Recommendation` text | LLM service |
-| Persist | Full assessment | Row(s) + audit event | PostgreSQL |
+| RF | Feature vector | `risk_class` and probability | Model registry |
+| Fusion | Rule flags and RF output | One `SeverityLabel` with a rationale | none |
+| RAG | Label and flags | Top-k `GuidelineChunk` | Vector index |
+| LLM | Chunks and patient context | `Recommendation` text | LLM service |
+| Persist | Full assessment | Rows and an audit event | PostgreSQL |
 
 ---
 
-## 5. Sequence Diagram (request-time)
+## 5. Sequence diagram (per request)
 
 ```mermaid
 sequenceDiagram
@@ -234,13 +252,16 @@ sequenceDiagram
     API-->>U: 200 OK (recommendations + citations + disclaimer)
 ```
 
-**Why parallelize Rules and RFC?** They are independent (no data dependency between them), so running them concurrently reduces latency. Fusion is the join point — it is the *only* place that needs both.
+The rules and the Random Forest don't depend on each other, so they can run in
+parallel. Fusion is the only step that needs both results.
 
 ---
 
-## 6. Database Schema
+## 6. Database schema
 
-PostgreSQL (relational, ACID, auditable — important for a clinical-adjacent research system). Vector storage is **not** in PostgreSQL by default; it lives in FAISS/Chroma (Section 7). Optionally, `pgvector` can consolidate both — noted as an alternative.
+PostgreSQL was chosen because the data is relational and the audit trail needs
+transactions. Vectors live in FAISS or Chroma (section 7), with `pgvector` as an
+option if everything should be in one database.
 
 ```mermaid
 erDiagram
@@ -256,16 +277,16 @@ erDiagram
     RISK_ASSESSMENT ||--o{ AUDIT_EVENT : logs
 ```
 
-### 6.1 Table definitions (logical)
+### 6.1 Tables
 
-**patient** — demographic context (pseudonymized; no direct identifiers stored for research).
+**patient**: demographics, pseudonymised, with no direct identifiers.
 | column | type | notes |
 |---|---|---|
 | patient_id | UUID PK | pseudonymous |
 | age | int | |
-| sex | enum(M/F) | biological sex for reference ranges |
-| ethnicity | varchar | affects some thresholds (e.g., waist) |
-| height_cm, weight_kg | numeric | for BMI/waist derivations |
+| sex | enum(M/F) | biological sex, for reference ranges |
+| ethnicity | varchar | some thresholds depend on it (e.g. waist) |
+| height_cm, weight_kg | numeric | for BMI and waist calculations |
 | created_at | timestamptz | |
 
 **blood_report**
@@ -275,7 +296,7 @@ erDiagram
 | patient_id | UUID FK | |
 | source_type | enum(pdf,image,manual,csv) | |
 | raw_file_uri | text | object storage path |
-| ocr_confidence | numeric | null if manual |
+| ocr_confidence | numeric | null for manual entry |
 | status | enum(received,processed,failed) | |
 | created_at | timestamptz | |
 
@@ -284,25 +305,25 @@ erDiagram
 |---|---|---|
 | value_id | UUID PK | |
 | report_id | UUID FK | |
-| biomarker_code | varchar | canonical code (e.g., HBA1C, LDL, HDL, TRIG, FASTING_GLUCOSE, ALT, EGFR, HB, FERRITIN, TSH, CRP…) |
-| raw_value | numeric | as reported |
+| biomarker_code | varchar | canonical code (e.g. HBA1C, LDL, HDL, TRIG, FASTING_GLUCOSE, ALT, EGFR, HB, FERRITIN, TSH, CRP) |
+| raw_value | numeric | as printed on the report |
 | raw_unit | varchar | |
 | canonical_value | numeric | after unit conversion |
 | canonical_unit | varchar | SI/standard |
-| ref_low, ref_high | numeric | reference range applied |
+| ref_low, ref_high | numeric | reference range used |
 | in_range | boolean | |
 
-**risk_assessment** — the fusion result (one per report).
+**risk_assessment**: the fused result, one per report.
 | column | type | notes |
 |---|---|---|
 | assessment_id | UUID PK | |
 | report_id | UUID FK unique | |
-| final_severity | enum(low,moderate,high,urgent_referral) | the single fused label |
-| fusion_rationale | text | why this label (rule vs RF contribution) |
-| rule_severity | enum | max of rule flags |
-| rf_severity | enum | mapped from RF class |
-| model_version | varchar | RF model registry version |
-| ruleset_version | varchar | rule registry version |
+| final_severity | enum(low,moderate,high,urgent_referral) | the fused label |
+| fusion_rationale | text | whether the rules or the RF decided the label |
+| rule_severity | enum | highest rule flag |
+| rf_severity | enum | mapped from the RF class |
+| model_version | varchar | RF model version |
+| ruleset_version | varchar | ruleset version |
 | created_at | timestamptz | |
 
 **rule_flag**
@@ -311,10 +332,10 @@ erDiagram
 | flag_id | UUID PK | |
 | assessment_id | UUID FK | |
 | biomarker_code | varchar | |
-| rule_id | varchar | e.g., R_HBA1C_DIABETES_RANGE |
+| rule_id | varchar | e.g. R_HBA1C_DIABETES_RANGE |
 | triggered_severity | enum | |
-| guideline_ref | varchar | e.g., NICE NG28 |
-| message | text | human-readable |
+| guideline_ref | varchar | e.g. NICE NG28 |
+| message | text | readable explanation |
 
 **rf_prediction**
 | column | type | notes |
@@ -323,7 +344,7 @@ erDiagram
 | assessment_id | UUID FK | |
 | predicted_class | varchar | |
 | probability | numeric | |
-| shap_top_features | jsonb | ranked feature attributions |
+| shap_top_features | jsonb | ranked feature contributions |
 
 **recommendation**
 | column | type | notes |
@@ -331,9 +352,9 @@ erDiagram
 | recommendation_id | UUID PK | |
 | assessment_id | UUID FK | |
 | category | enum(diet,physical_activity,sleep,alcohol,smoking,stress,followup) | |
-| text | text | patient-friendly |
-| llm_model | varchar | provenance |
-| grounded | boolean | passed groundedness check |
+| text | text | written for the patient |
+| llm_model | varchar | which model wrote it |
+| grounded | boolean | passed the groundedness check |
 | created_at | timestamptz | |
 
 **recommendation_citation**
@@ -342,15 +363,15 @@ erDiagram
 | citation_id | UUID PK | |
 | recommendation_id | UUID FK | |
 | chunk_id | UUID FK → guideline_chunk | |
-| quote | text | supporting snippet |
+| quote | text | supporting text |
 
 **guideline_doc**
 | column | type | notes |
 |---|---|---|
 | doc_id | UUID PK | |
 | source | enum(NICE,NHS,WHO) | |
-| title, code | varchar | e.g., NG28, CG181 |
-| url, version, published_date | | provenance for reproducibility |
+| title, code | varchar | e.g. NG28, CG181 |
+| url, version, published_date | | where it came from, for reproducibility |
 
 **guideline_chunk**
 | column | type | notes |
@@ -359,75 +380,106 @@ erDiagram
 | doc_id | UUID FK | |
 | chunk_text | text | |
 | section_heading | varchar | |
-| embedding_ref | varchar | id/pointer into FAISS/Chroma (or vector if pgvector) |
+| embedding_ref | varchar | id in FAISS/Chroma (or the vector itself with pgvector) |
 | token_count | int | |
 
-**audit_event** — required for a trustworthy clinical-adjacent pipeline.
+**audit_event**: a log entry for each stage of an assessment.
 | column | type | notes |
 |---|---|---|
 | event_id | UUID PK | |
 | assessment_id | UUID FK | |
 | stage | enum(ingest,rules,rf,fusion,rag,llm,persist) | |
-| payload | jsonb | inputs/outputs snapshot (pseudonymized) |
-| latency_ms | int | per-stage timing |
+| payload | jsonb | pseudonymised inputs and outputs |
+| latency_ms | int | time taken by the stage |
 | created_at | timestamptz | |
 
 ---
 
-## 7. Technology Stack & Justification
+## 7. Technology choices
 
-| Layer | Technology | Why this, and why not the alternative |
+| Layer | Technology | Reason |
 |---|---|---|
-| **Language** | Python 3.11+ | The only ecosystem covering ML (scikit-learn), RAG (LangChain/LlamaIndex), and web (FastAPI) in one language. Reduces context-switching for a solo MSc researcher. |
-| **API framework** | **FastAPI** | Async, native Pydantic validation (enforces the typed stage contracts), auto-generated OpenAPI docs (great for a dissertation appendix). Chosen over Flask (no async/native validation) and Django (too heavyweight; ORM/admin not needed). |
-| **Data validation** | **Pydantic v2** | Enforces the DTO contracts between every stage — this is how SOLID's interface segregation is made concrete and testable. |
-| **Frontend** | **Streamlit** | Fastest path to a credible research UI; file upload, forms, and result display with minimal code. Chosen over React (build overhead unjustified for a single-user research demo) and Gradio (less layout control). |
-| **Rule engine** | Pure-Python registry + config (YAML/JSON thresholds) | Deterministic, auditable, and **version-controllable**. A config-driven registry satisfies Open/Closed — new rules without code edits. Avoided a heavyweight BRMS (Drools) as overkill. |
-| **ML model** | **scikit-learn RandomForestClassifier** | Requested; also genuinely appropriate — robust on tabular NHANES data, handles mixed features, low tuning burden, and **natively explainable** via feature importance + SHAP. Chosen over XGBoost (marginal accuracy gain, harder to justify/explain in a dissertation) and deep nets (data-hungry, opaque, unjustified on tabular data). |
-| **Explainability** | **SHAP** | Turns the RF from a black box into a defensible, per-prediction explanation — essential for a clinical-adjacent, examiner-scrutinized system. |
-| **Embeddings** | Sentence-Transformers (e.g., `all-MiniLM` / BGE) or provider embeddings | Local option keeps guideline processing free/offline and reproducible; provider option higher quality. Behind an `IEmbedder` port so either works. |
-| **Vector store** | **FAISS** (default) or **Chroma** | FAISS: fast, local, zero-infra, perfect for a fixed guideline corpus and reproducible experiments. Chroma if metadata filtering/persistence ergonomics are preferred. Both behind a `VectorStore` port. `pgvector` noted as a consolidation option. |
-| **RAG orchestration** | **LangChain** or **LlamaIndex** | Provides retrievers, chunkers, and rerankers so you compose rather than reinvent. Keep it thin and behind ports so the framework is not load-bearing (avoids lock-in). |
-| **LLM** | Provider-abstracted: OpenAI/Anthropic *or* local (Llama/Mistral via Ollama) | Behind an `LLMProvider` port. Cloud for quality during development; local for a cost-free, privacy-preserving, reproducible dissertation demo. Swappable by config. |
-| **Database** | **PostgreSQL** | ACID, relational integrity for the assessment/audit trail, mature, free. Optional `pgvector` to unify vectors. Chosen over SQLite (fine for dev, but Postgres shows production intent) and NoSQL (relationships here are strongly relational). |
-| **ORM** | SQLAlchemy 2.0 + Alembic | Repository pattern + migrations = reproducible schema, clean separation of persistence from domain. |
-| **Training data** | **NHANES** | Large, public, de-identified US population survey with labs + demographics + outcomes — ideal for training the combinatorial RF and defensible in an ethics review (no bespoke patient data collection). |
-| **Testing** | pytest + coverage | Unit tests per stage (contracts make this trivial), integration tests for the pipeline. |
-| **Packaging/Deploy** | ~~Docker + docker-compose~~ → **local Python application** | *Revised in Phase 10.* With no database and no vector service, the "stack" is one process per interface, so containers orchestrated nothing and mostly packaged PyTorch. Reproducibility is carried instead by pinned dependency floors, committed model/index artefacts, a fixed seed, and CI that installs from scratch. See `10_deployment.md` §5. |
-| **Config/secrets** | pydantic-settings + `.env` | Keys never hardcoded; environment-driven config supports Dependency Inversion at the boundary. |
-| **Experiment tracking (optional)** | MLflow | Logs RF metrics, model versions, and RAG eval runs — strengthens the dissertation's reproducibility chapter. |
+| **Language** | Python 3.11+ | Covers ML (scikit-learn), RAG (LangChain/LlamaIndex) and web (FastAPI) in one language. |
+| **API framework** | **FastAPI** | Async, validates requests with Pydantic, and generates OpenAPI docs automatically. Flask lacks built-in validation; Django brings an ORM and admin site that aren't needed. |
+| **Data validation** | **Pydantic v2** | Defines the typed inputs and outputs between stages. |
+| **Frontend** | **Streamlit** | The quickest way to build a research UI with uploads, forms and results. React would need a build setup that a single-user demo doesn't justify, and Gradio offers less control over layout. |
+| **Rule engine** | Plain Python with YAML/JSON thresholds | Deterministic, auditable and version-controlled, and new rules don't need code changes. A full rules engine such as Drools would be overkill. |
+| **ML model** | **scikit-learn RandomForestClassifier** | Works well on tabular data like NHANES, handles mixed features, needs little tuning and can be explained with feature importance and SHAP. XGBoost might be slightly more accurate but is harder to explain, and neural networks need more data and are harder to interpret. |
+| **Explainability** | **SHAP** | Explains individual predictions, which matters for anything close to clinical use. |
+| **Embeddings** | Sentence-Transformers (e.g. `all-MiniLM` or BGE) or a provider's embeddings | A local model is free, works offline and gives reproducible results; provider embeddings may be better quality. Both sit behind an `IEmbedder` port. |
+| **Vector store** | **FAISS** (default) or **Chroma** | FAISS is fast and local with nothing to set up, which suits a small fixed corpus. Chroma has easier metadata filtering. Both sit behind a `VectorStore` port, and `pgvector` is another option. |
+| **RAG orchestration** | **LangChain** or **LlamaIndex** | Ready-made retrievers, chunkers and rerankers, kept behind ports so the project isn't tied to either. |
+| **LLM** | OpenAI/Anthropic or a local model (Llama/Mistral via Ollama) | Behind an `LLMProvider` port. Cloud models give better quality during development; a local model makes the demo free and private. The choice is a config setting. |
+| **Database** | **PostgreSQL** | Transactions and relational integrity for the assessment and audit tables, and it's free. SQLite would be fine for development; a document database doesn't suit data this relational. Optional `pgvector` for vectors. |
+| **ORM** | SQLAlchemy 2.0 + Alembic | Repositories and migrations keep persistence separate from the domain. |
+| **Training data** | **NHANES** | A large, public, de-identified US survey with lab results, demographics and outcomes, so no new patient data has to be collected. |
+| **Testing** | pytest + coverage | Unit tests for each stage and integration tests for the whole pipeline. |
+| **Packaging/deployment** | ~~Docker + docker-compose~~ → **local Python application** | *Changed in Phase 10.* Without a database or vector service there was nothing for containers to orchestrate, and the image was mostly PyTorch. Reproducibility comes from dependency floors, the committed model and index, a fixed random seed and CI that installs from scratch. See `10_deployment.md` §5. |
+| **Config/secrets** | pydantic-settings + `.env` | Keys come from the environment and are never written into the code. |
+| **Experiment tracking (optional)** | MLflow | Logs model metrics, model versions and RAG evaluation runs. |
 
 ---
 
-## 8. Module Communication & Complete Request Flow
+## 8. How the modules communicate
 
-### 8.1 How modules communicate
+### 8.1 Interfaces between parts
 
-- **UI ↔ API:** HTTPS, JSON + multipart file upload. The UI is a *pure client*; it holds no business logic. This decoupling means the same API can later serve a mobile or web front end (Liskov at the system level).
-- **Controller ↔ Use Cases:** in-process function calls with **Pydantic DTOs** as the contract. The controller never touches the domain directly — only the orchestrator use case.
-- **Use Cases ↔ Domain:** the orchestrator calls domain services (Rule Engine, Fusion) that operate on pure domain entities with **no external dependencies**.
-- **Use Cases ↔ External systems:** *only* through **ports** (`OCRExtractor`, `IEmbedder`, `VectorStore`, `LLMProvider`, `Repository`). Concrete adapters are injected. This is the Dependency Inversion boundary — the whole reason the LLM/vector store/model are swappable.
-- **RF model & vector index:** loaded from a **registry/index at startup** (not per request) for latency; versioned so results are reproducible and auditable.
-- **Persistence:** the orchestrator writes through a `Repository` port; the domain never imports SQLAlchemy.
+- **UI and API:** HTTPS with JSON and multipart file uploads. The UI has no
+  business logic of its own, so another front end could use the same API.
+- **Controllers and use cases:** ordinary function calls, passing Pydantic
+  objects. Controllers only talk to the orchestrator, never to the domain
+  directly.
+- **Use cases and domain:** the orchestrator calls domain services (rule engine,
+  fusion) that work on plain domain objects with no external dependencies.
+- **Use cases and external systems:** only through ports (`OCRExtractor`,
+  `IEmbedder`, `VectorStore`, `LLMProvider`, `Repository`), with the concrete
+  adapters passed in. This is what lets the LLM, vector store and model be
+  replaced.
+- **Model and vector index:** loaded once at startup rather than per request,
+  and versioned so results can be reproduced.
+- **Persistence:** the orchestrator writes through a `Repository` port, so the
+  domain never imports SQLAlchemy.
 
-### 8.2 End-to-end request flow (narrative)
+### 8.2 A request from start to finish
 
-1. **Upload.** User submits a blood report (PDF/image/manual form) + demographics via Streamlit → `POST /analyze`.
-2. **Validation.** FastAPI validates file type/size and demographic DTO with Pydantic; rejects malformed input early (fail fast).
-3. **Ingestion & normalization.** If PDF/image, the OCR adapter extracts biomarker key-values; values are converted to **canonical units** and mapped to canonical biomarker codes, with sex/age/ethnicity-specific reference ranges attached. Output: `Biomarker[]`.
-4. **Deterministic path (Rules).** The Rule Engine evaluates each biomarker against threshold rules (guideline-cited). Output: `RuleFlag[]` — single-biomarker breaches with severities.
-5. **Probabilistic path (RFC), in parallel.** The feature vector is built and the Random Forest predicts a **combinatorial** risk class + probability, catching risky *patterns* where no single rule fired. SHAP produces per-prediction attributions.
-6. **Fusion.** The Fusion module merges Rule severity and RF severity into **one final `SeverityLabel`** using a priority/max policy (a rule-triggered "urgent referral" always dominates), and records a **rationale** stating which path drove the label. *This is the single source of truth for the rest of the pipeline.*
-7. **RAG query.** A retrieval query is composed from the **final label + active flags + patient context**, embedded, and run against the guideline vector index; top-k chunks are retrieved and reranked. Output: `GuidelineChunk[]` with provenance (source, code, section).
-8. **LLM generation.** The LLM receives patient context + final label + retrieved chunks + SHAP highlights, and generates **grounded, patient-friendly recommendations by category** (diet, activity, sleep, alcohol, smoking, stress, follow-up). Prompt constrains it to cite only retrieved evidence.
-9. **Groundedness & safety pass.** Output is checked for citation coverage (every claim maps to a chunk), the mandatory **non-diagnostic disclaimer** is attached, and any red-flag label ("urgent_referral") triggers a prominent "seek medical advice" message.
-10. **Persist & respond.** The full assessment + citations + per-stage audit events are written to PostgreSQL; the assembled `RecommendationResponse` returns to the UI (200 OK) and renders with citations and disclaimer.
+1. **Upload.** The user uploads a blood report (PDF, image or manual form) with
+   their demographics in Streamlit, which calls `POST /analyze`.
+2. **Validation.** FastAPI checks the file type and size and validates the
+   demographics with Pydantic. Bad input is rejected straight away.
+3. **Ingestion and normalisation.** For a PDF or image, the OCR adapter extracts
+   the biomarker names and values. Values are converted to canonical units,
+   mapped to canonical biomarker codes, and given reference ranges for the
+   patient's sex, age and ethnicity. The result is a list of `Biomarker`.
+4. **Rules.** The rule engine checks each biomarker against its thresholds, each
+   linked to a guideline, and returns `RuleFlag` entries for single-biomarker
+   breaches.
+5. **Random Forest, in parallel.** The feature vector is built and the model
+   predicts a risk class and probability, catching risky combinations where no
+   single rule fired. SHAP gives the contribution of each feature.
+6. **Fusion.** The rule severity and the model severity are merged into one
+   `SeverityLabel` by taking the more severe of the two, and an urgent referral
+   from the rules always wins. The fusion step records which of the two decided
+   the label, and the rest of the pipeline uses this label.
+7. **Retrieval.** A query is built from the label, the flags and the patient
+   context, embedded, and searched against the guideline index. The top-k
+   passages are retrieved and reranked, each with its source, code and section.
+8. **LLM generation.** The LLM gets the patient context, the label, the retrieved
+   passages and the main SHAP features, and writes recommendations by category
+   (diet, activity, sleep, alcohol, smoking, stress, follow-up). The prompt only
+   allows it to cite the retrieved passages.
+9. **Groundedness and safety checks.** Each claim must map to a passage, the
+   non-diagnostic disclaimer is added, and an urgent referral label adds a clear
+   "seek medical advice" message.
+10. **Save and respond.** The assessment, citations and per-stage audit events
+    are written to PostgreSQL, and the `RecommendationResponse` goes back to the
+    UI to display with its citations and disclaimer.
 
 ---
 
-## 9. Folder Structure
+## 9. Planned folder structure
 
-Clean-architecture layout; dependencies point inward. `domain` imports nothing external.
+Laid out to match the layers, with `domain` importing nothing external. The
+actual layout is in the README.
 
 ```
 blood-test-lifestyle-recommender/
@@ -446,53 +498,53 @@ blood-test-lifestyle-recommender/
 │
 ├── src/
 │   └── app/
-│       ├── domain/                 ← ENTITIES (no external deps)
+│       ├── domain/                 ← entities (no external deps)
 │       │   ├── entities.py         ← Patient, Biomarker, BloodReport…
 │       │   ├── value_objects.py    ← SeverityLabel, ReferenceRange…
 │       │   └── services/
-│       │       ├── rule_engine.py  ← pure threshold logic
-│       │       └── fusion.py       ← severity merge policy
+│       │       ├── rule_engine.py  ← threshold logic
+│       │       └── fusion.py       ← severity merge
 │       │
-│       ├── application/            ← USE CASES + PORTS
+│       ├── application/            ← use cases and ports
 │       │   ├── ports/              ← abstract interfaces
 │       │   │   ├── ocr.py
 │       │   │   ├── embedder.py
 │       │   │   ├── vector_store.py
 │       │   │   ├── llm_provider.py
 │       │   │   └── repositories.py
-│       │   ├── dto/                ← Pydantic stage contracts
+│       │   ├── dto/                ← Pydantic stage inputs/outputs
 │       │   └── use_cases/
 │       │       ├── analyze_report.py     ← the orchestrator
 │       │       ├── retrieve_guidelines.py
 │       │       └── generate_recommendation.py
 │       │
-│       ├── ml/                     ← RF model lifecycle
+│       ├── ml/                     ← Random Forest
 │       │   ├── features.py
 │       │   ├── train.py
 │       │   ├── predict.py
 │       │   ├── explain.py          ← SHAP
-│       │   └── registry/           ← versioned .pkl / metadata
+│       │   └── registry/           ← saved models and metadata
 │       │
-│       ├── rag/                    ← offline + online RAG
-│       │   ├── ingest.py           ← load/clean guidelines
+│       ├── rag/                    ← offline and online RAG
+│       │   ├── ingest.py           ← load and clean guidelines
 │       │   ├── chunk.py
 │       │   ├── build_index.py      ← embed → FAISS/Chroma
 │       │   └── retriever.py
 │       │
-│       ├── adapters/               ← CONCRETE implementations of ports
+│       ├── adapters/               ← concrete implementations of the ports
 │       │   ├── ocr_tesseract.py
 │       │   ├── embedder_st.py
 │       │   ├── vector_faiss.py
 │       │   ├── llm_openai.py / llm_ollama.py
 │       │   └── repo_sqlalchemy.py
 │       │
-│       ├── api/                    ← FastAPI (frameworks & drivers)
+│       ├── api/                    ← FastAPI
 │       │   ├── main.py
 │       │   ├── routers/analyze.py
-│       │   ├── schemas.py          ← request/response DTOs
-│       │   └── deps.py             ← dependency injection wiring
+│       │   ├── schemas.py          ← request/response models
+│       │   └── deps.py             ← dependency wiring
 │       │
-│       ├── config/                 ← pydantic-settings, rule/threshold YAML
+│       ├── config/                 ← settings and rule/threshold YAML
 │       │   ├── settings.py
 │       │   └── clinical_rules.yaml
 │       │
@@ -504,9 +556,9 @@ blood-test-lifestyle-recommender/
 │   └── streamlit_app.py
 │
 ├── tests/
-│   ├── unit/                       ← per-stage (rules, fusion, features…)
+│   ├── unit/                       ← per stage (rules, fusion, features…)
 │   ├── integration/                ← full pipeline
-│   └── eval/                       ← RAG + recommendation evaluation
+│   └── eval/                       ← RAG and recommendation evaluation
 │
 └── scripts/
     ├── download_nhanes.py
@@ -516,66 +568,50 @@ blood-test-lifestyle-recommender/
 
 ---
 
-## 10. Potential Challenges & Solutions
+## 10. Expected challenges
 
-| # | Challenge | Risk | Solution / mitigation |
+| # | Challenge | Risk | Mitigation |
 |---|---|---|---|
-| 1 | **OCR unreliability** on scanned/photographed reports | Wrong biomarker values → wrong everything downstream | Confidence thresholds; require manual confirmation of extracted values in the UI before analysis; support a manual-entry and CSV path so OCR is optional. |
-| 2 | **Unit heterogeneity** (mg/dL vs mmol/L; HbA1c % vs mmol/mol) | Silent misclassification | Canonical-unit normalization layer with an explicit conversion table; reject unknown units rather than guess. |
-| 3 | **LLM hallucination / ungrounded advice** | Clinical-safety and dissertation-credibility failure | Strict RAG grounding; prompt forbids un-cited claims; automated **groundedness check** (claim→chunk mapping); low temperature; refuse-and-signpost fallback when evidence is insufficient. |
-| 4 | **RF trained on NHANES (US) applied with NICE/NHS (UK) thresholds** | Population/label mismatch | Keep the RF as a *risk-pattern* detector, not a diagnostic; anchor all clinical thresholds/labels in the deterministic rule engine (UK guidelines); document this design boundary explicitly in the dissertation. |
-| 5 | **Class imbalance** in NHANES risk labels | RF biased to majority class | Stratified splits, class weights / resampling (SMOTE), and report **balanced** metrics (macro-F1, PR-AUC) not just accuracy. |
-| 6 | **Defining the RF target label** (NHANES has no "lifestyle severity" column) | Weak, indefensible ground truth | Derive a transparent composite risk label from established indices (e.g., metabolic-syndrome criteria, cardiometabolic markers) and document the labeling rule fully — this becomes a methods contribution. |
-| 7 | **Fusion conflicts** (rules say low, RF says high, or vice versa) | Ambiguous final label | Explicit, documented **priority policy**: safety-dominant (max severity wins); rule-triggered urgent referral always overrides; store `fusion_rationale` for auditability. |
-| 8 | **Guideline corpus drift / provenance** | Recommendations cite outdated guidance | Version + date every `guideline_doc`; rebuild index as a tracked artifact; cite source code + version in every recommendation. |
-| 9 | **Latency** (OCR + RF + embedding + retrieval + LLM) | Poor UX | Load model/index at startup; run Rules and RF in parallel; cache embeddings of the fixed corpus; stream LLM output. |
-| 10 | **Data privacy / ethics** | Handling health data | Pseudonymize; store no direct identifiers; NHANES is de-identified/public; explicit consent + disclaimer in UI; document in the ethics chapter. |
-| 11 | **Evaluation of a generative system** | Hard to grade "good advice" objectively | Multi-pronged (Phase 9): RF classification metrics; RAG retrieval metrics (recall@k, MRR); groundedness/faithfulness scoring; and a small clinician/rubric-based human eval. |
-| 12 | **Reproducibility for examiners** | "Works on my machine" | Pinned dependency floors; the trained model and FAISS index committed to the repo so a clean clone runs immediately; fixed random seed through data prep and training; CI that installs from scratch and runs all 63 tests on every push. |
+| 1 | **OCR errors** on scanned or photographed reports | Wrong values affect everything downstream | Confidence thresholds, and the user confirms extracted values in the UI before analysis. Manual entry and CSV upload mean OCR is never required. |
+| 2 | **Different units** (mg/dL vs mmol/L, HbA1c % vs mmol/mol) | Results silently misclassified | A normalisation step with an explicit conversion table. Unknown units are rejected rather than guessed. |
+| 3 | **LLM hallucination** or advice without evidence | Unsafe advice and weaker results | Strict grounding in retrieved passages, a prompt that forbids uncited claims, an automatic groundedness check mapping claims to passages, low temperature, and a fallback that signposts instead of guessing when evidence is thin. |
+| 4 | **Model trained on US data (NHANES), thresholds from UK guidelines (NICE/NHS)** | Mismatch between population and labels | Treat the model as a risk-pattern detector, never as a diagnosis. Clinical thresholds stay in the UK-based rule engine, and the limitation is stated in the dissertation. |
+| 5 | **Class imbalance** in the risk labels | Model biased towards the majority class | Stratified splits, class weights or resampling (SMOTE), and balanced metrics (macro-F1, PR-AUC) as well as accuracy. |
+| 6 | **No ready-made target label** (NHANES has no "lifestyle severity" column) | Weak ground truth | Build a transparent composite label from established criteria (e.g. metabolic syndrome, cardiometabolic markers) and document the rule fully. |
+| 7 | **Fusion conflicts** (rules say low and the model says high, or the other way round) | Unclear final label | A documented rule: the more severe result wins, an urgent referral from the rules always wins, and `fusion_rationale` records the reason. |
+| 8 | **Guidelines going out of date** | Recommendations cite old guidance | Version and date every `guideline_doc`, rebuild the index as a tracked artefact, and cite the code and version in each recommendation. |
+| 9 | **Latency** (OCR, model, embedding, retrieval, LLM) | Slow responses | Load the model and index at startup, run rules and model in parallel, cache embeddings of the fixed corpus, and stream the LLM output. |
+| 10 | **Privacy and ethics** | Handling health data | Pseudonymise, store no direct identifiers (NHANES is already de-identified and public), show consent and a disclaimer in the UI, and cover it in the ethics chapter. |
+| 11 | **Evaluating generated advice** | "Good advice" is hard to measure | Several measures: classification metrics for the model, retrieval metrics (recall@k, MRR), groundedness and faithfulness scores, and a small rubric-based human review. |
+| 12 | **Reproducibility** | Results that only work on one machine | Dependency floors, the trained model and FAISS index committed so a fresh clone runs immediately, a fixed random seed through data prep and training, and CI that installs from scratch and runs all 63 tests on every push. |
 
 ---
 
-## 11. Traceability: your five requirements → this design
+## 11. Requirements traceability
 
-| Your requirement | Where it lives |
+| Requirement | Where it's handled |
 |---|---|
-| 1. Rules handle single biomarker threshold breaches | `domain/services/rule_engine.py`; `rule_flag` table; config `clinical_rules.yaml` |
-| 2. RFC handles combinations where no single rule fires | `ml/predict.py`; `rf_prediction` table |
-| 3. Two outputs merge into one final severity label | `domain/services/fusion.py`; `risk_assessment.final_severity` + `fusion_rationale` |
-| 4. RAG retrieves guidelines based on that final label | `rag/retriever.py`; query built from `final_severity` + flags |
-| 5. LLM generates explanation | `application/use_cases/generate_recommendation.py`; `recommendation` + `recommendation_citation` |
+| 1. Rules handle single-biomarker threshold breaches | `domain/services/rule_engine.py`, `rule_flag` table, `clinical_rules.yaml` |
+| 2. The RF handles combinations where no single rule fires | `ml/predict.py`, `rf_prediction` table |
+| 3. The two outputs merge into one final severity | `domain/services/fusion.py`, `risk_assessment.final_severity` and `fusion_rationale` |
+| 4. RAG retrieves guidelines based on that severity | `rag/retriever.py`, query built from `final_severity` and the flags |
+| 5. The LLM generates the explanation | `application/use_cases/generate_recommendation.py`, `recommendation` and `recommendation_citation` tables |
 
 ---
 
-## 11a. As-built deviations from this design
+## 11a. Differences in the finished system
 
-This document is the **Phase-1 design record**, kept as written so the design →
-implementation evolution stays visible. Four decisions changed during build. Each
-is recorded here so the document is not read as a description of the finished
-system.
+The design above is kept as written so the changes during development stay
+visible. These are the decisions that changed:
 
-| Designed | As built | Why |
+| Designed | Built | Why |
 |---|---|---|
-| **PostgreSQL + SQLAlchemy + Alembic**, with the audit-trail schema in §6 (`risk_assessment`, `rule_flag`, `rf_prediction`, `recommendation`, `recommendation_citation`) | **No database.** The system is stateless: a request is assessed, answered, and forgotten | Nothing needed to persist. No user accounts, no history feature, no longitudinal comparison. A schema with no reader is cost without benefit — and storing health records would have widened the ethics footprint for no functional gain. The audit trail survives *in the response*: every assessment carries its rule flags, RF probabilities, SHAP drivers, evidence citations and groundedness score. |
-| **Docker + docker-compose**, deploy to HF Spaces / Render / VM | **Local Python application** | See §7 and `10_deployment.md` §5. |
-| **MLflow** experiment tracking | **Metadata sidecar + committed reports** | `rf_model_metadata.json` records best params, CV score, feature names, label order and training size; `reports/phase4` and `reports/phase9` hold the metrics and plots. Sufficient for one model with one training run. |
-| `application/use_cases/` layer | Folded into **`recommend/engine.py`** | The orchestrator is a single class (`RecommendationEngine`). A dedicated use-case package for one collaborator was indirection without separation. |
+| **PostgreSQL + SQLAlchemy + Alembic**, with the audit schema in §6 | **No database.** Each request is assessed, answered and not stored | Nothing needed saving: there are no user accounts, no history and no comparison over time. Storing health records would also have added ethical risk for no benefit. The audit information is in the response instead: rule flags, model probabilities, SHAP drivers, citations and the groundedness score. |
+| **OCR adapter** for scanned PDFs and images | **Text extraction from PDFs**, plus CSV and JSON uploads | Lab PDFs contain a text layer, so OCR wasn't needed. Scanned reports and photos aren't supported. |
+| **LangChain or LlamaIndex** for retrieval | **A small custom retriever** over FAISS | A corpus of 32 passages doesn't need a framework (see `05_rag.md`). LangChain is only used for the LLM calls. |
+| **pytest** test layout (`unit/`, `integration/`, `eval/`) | **Seven test scripts** in `tests/` that run directly with Python and also work under pytest | Simpler to run with no extra dependency. |
+| **Docker + docker-compose**, deployed to HF Spaces, Render or a VM | **Local Python application** | See §7 and `10_deployment.md` §5. |
+| **MLflow** experiment tracking | **Model metadata file and committed reports** | `rf_model_metadata.json` stores the best parameters, CV score, feature names, label order and training size, and `reports/phase4` and `reports/phase9` hold the metrics and plots. That's enough for one model trained once. |
+| `application/use_cases/` layer | Merged into **`recommend/engine.py`** | The orchestration is one class (`RecommendationEngine`), so a separate use-case package would only have added indirection. |
 
-The dependency rule, the five-stage contract, the ports-and-adapters boundaries
-and the layered structure all survived unchanged — those are what the design was
-for.
-
----
-
-## 12. Phase 1 Exit Criteria (what "done" means)
-
-- [x] Layered clean-architecture design with enforced dependency rule
-- [x] Component, data-flow, and sequence diagrams
-- [x] Relational schema with full audit trail
-- [x] Folder structure mapping 1:1 to the architecture
-- [x] Technology choices justified against alternatives
-- [x] Module communication + end-to-end request flow documented
-- [x] Challenges and mitigations catalogued
-- [x] The five-stage contract (Rules → RFC → Fusion → RAG → LLM) formalized
-
-**Ready to proceed to Phase 2 (NHANES Data Preparation) on approval.**
+The layering, the five stages and the port boundaries stayed the same.

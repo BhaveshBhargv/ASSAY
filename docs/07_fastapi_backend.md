@@ -1,14 +1,14 @@
-# Phase 7 — FastAPI Backend ("Assay API")
+# Phase 7: FastAPI backend
 
-**Author:** Bhavesh Bhargava — MSc Advanced Data Science
-**Status:** Implemented (`src/app/api/`), verified live and via TestClient (8/8).
-**Run:** `python scripts/run_api.py` → Swagger at `http://localhost:8000/docs`
-(or `uvicorn app.api.main:app --app-dir src --reload`).
+**Author:** Bhavesh Bhargava, MSc Advanced Data Science
+**Code:** `src/app/api/`, tested with TestClient (8 tests) and against a running server
+**Run:** `python scripts/run_api.py`, then open `http://localhost:8000/docs`
+(or `uvicorn app.api.main:app --app-dir src --reload`)
 
-> **Role in the project.** The HTTP interface to the Phase 3-6 engine. It is a thin
-> interface-adapter: controllers handle HTTP, services orchestrate the engine,
-> repositories own the loaded artefacts. The Streamlit dashboard could later call
-> these endpoints instead of the engine directly, with no change to the engine.
+The API gives HTTP access to the same engine the dashboard uses. Controllers
+handle HTTP, services run the engine, and repositories hold the loaded model and
+index. The dashboard calls the engine directly at the moment, but it could switch
+to these endpoints without any change to the engine.
 
 ---
 
@@ -16,102 +16,105 @@
 
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/upload` | Parse a blood report (CSV/JSON/PDF) → recognised biomarkers + notes for review |
-| `POST` | `/predict` | Rules + Random Forest + fusion → one severity + per-biomarker results |
-| `POST` | `/recommend` | Full pipeline: assess → retrieve → LLM → verify → grounded report |
-| `POST` | `/retrieve` | Semantic search over NICE/NHS/WHO passages (query, or severity + flags) |
-| `GET`  | `/model-info` | Ruleset version, RF details/metrics, RAG index, biomarker catalog |
-| `GET`  | `/health` | Liveness/readiness probe |
+| `POST` | `/upload` | Parse a blood report (CSV/JSON/PDF) into recognised biomarkers and parse notes to review |
+| `POST` | `/predict` | Rules, Random Forest and fusion: one severity plus a result for each biomarker |
+| `POST` | `/recommend` | The whole pipeline: assess, retrieve, generate with the LLM, check, and return the report |
+| `POST` | `/retrieve` | Search the NICE/NHS/WHO passages, by query text or by severity and flagged markers |
+| `GET`  | `/model-info` | Ruleset version, model details and metrics, index details, biomarker list |
+| `GET`  | `/health` | Health check |
 
-Interactive docs: **Swagger `/docs`**, ReDoc `/redoc`, schema `/openapi.json`.
+API docs: Swagger at `/docs`, ReDoc at `/redoc`, and the schema at `/openapi.json`.
 
 ---
 
-## 2. Architecture (controllers → services → repositories)
+## 2. Structure
 
 ```
 src/app/api/
-  main.py                 app factory: lifespan warm-up, middleware, CORS, handlers, routers
-  dependencies.py         DI wiring (repositories = lru_cache singletons; services per request)
+  main.py                  creates the app: startup, middleware, CORS, error handlers, routers
+  dependencies.py          wiring (cached repositories, services created per request)
   core/
-    config.py             settings (env prefix ASSAY_)
-    logging.py            request-id context + RequestContextMiddleware
-    errors.py             typed AppError hierarchy + JSON exception handlers
-  schemas/                Pydantic request/response models (validation lives here)
+    config.py              settings (environment variables starting with ASSAY_)
+    logging.py             request id and RequestContextMiddleware
+    errors.py              AppError types and the JSON error handlers
+  schemas/                 Pydantic request and response models, where validation happens
     common.py  predict.py  recommend.py  retrieve.py  upload.py  model_info.py
-  repositories/           own the loaded artefacts (one responsibility each)
-    rule_repository.py    RuleEngine + ruleset
-    model_repository.py   Random Forest (RiskAdapter) + metadata
+  repositories/            hold the loaded artefacts
+    rule_repository.py       RuleEngine and ruleset
+    model_repository.py      Random Forest (RiskAdapter) and its metadata
     retrieval_repository.py  FAISS GuidelineRetriever
-    llm_repository.py     builds LLM providers (behind the port)
-  services/               business logic / orchestration
+    llm_repository.py        creates LLM providers
+  services/                the logic behind each endpoint
     assessment_service.py  recommendation_service.py  retrieval_service.py
     upload_service.py      model_info_service.py      mappers.py
-  controllers/            FastAPI routers (one per resource)
+  controllers/             one FastAPI router per resource
 ```
 
-- **Dependency injection.** Controllers depend only on service getters
-  (`Depends(get_assessment_service)`). Services receive repositories by
-  constructor injection. Repositories are process-singletons via `lru_cache`, so
-  the heavy artefacts (RF, FAISS index, sentence-transformer) load **once**;
-  `warm_up()` primes them in the lifespan startup so the first request isn't slow.
-- **Separation of concerns.** Controllers = HTTP only; services = orchestration;
-  repositories = artefact loading; `mappers.py` = domain → wire format. Nothing in
-  the HTTP layer knows how a model is loaded.
+- Controllers only depend on service getters such as
+  `Depends(get_assessment_service)`. Services get their repositories through the
+  constructor, and the repositories are cached with `lru_cache`, so the Random
+  Forest, FAISS index and embedding model are loaded once per process.
+  `warm_up()` loads them at startup so the first request isn't slow.
+- Controllers deal with HTTP, services run the engine, repositories load
+  artefacts, and `mappers.py` turns engine objects into response models. The
+  HTTP layer never needs to know how a model is loaded.
 
 ---
 
-## 3. Cross-cutting concerns
+## 3. Validation, logging and errors
 
-**Validation** — Pydantic v2 models. `Demographics` bounds age/sex/codes; the
-shared `validate_biomarkers` rejects unknown codes and non-positive values with a
-clear message; `/retrieve` requires a query or a severity/flags signal. Failures
-return **422** with the structured error list.
+**Validation.** The request models use Pydantic v2. `Demographics` checks age,
+sex and the NHANES codes. `validate_biomarkers` rejects unknown biomarker codes
+and values that aren't positive numbers, with a clear message. `/retrieve` needs
+either a query or a severity and/or flagged markers. Invalid requests get a
+**422** with the list of errors.
 
-**Logging** — structured logs carry a per-request `request_id` (context var). The
-`RequestContextMiddleware` assigns it, logs `METHOD path -> status (Nms)`, and
-echoes it in the `X-Request-ID` response header for client/server correlation.
+**Logging.** Every request gets a `request_id`. `RequestContextMiddleware` sets
+it, logs `METHOD path -> status (Nms)`, and returns it in the `X-Request-ID`
+header so a client can match a response to the server logs.
 
-**Error handling** — one JSON envelope everywhere:
+**Errors.** All errors use the same JSON shape:
 ```json
 {"error": {"type": "llm_unavailable", "message": "...", "detail": {...}}, "request_id": "…"}
 ```
-Typed errors map to status codes: `validation_error`/`parsing_error` → 422,
-`payload_too_large` → 413, `llm_unavailable` → 502, `model_unavailable` → 503,
-and any unhandled exception → 500 (logged with the request_id, never leaked).
-Notably, `/recommend` with no LLM running returns a clean **502**, not a crash.
+Each error type has a status code: `validation_error` and `parsing_error` → 422,
+`payload_too_large` → 413, `llm_unavailable` → 502, `model_unavailable` → 503.
+Any other exception becomes a 500. It's logged with the request id, and no
+internal details are returned. When no LLM is running, `/recommend` returns a
+**502** rather than failing.
 
-**Swagger** — rich OpenAPI: title/description/version, tag groups, per-route
-summaries and descriptions, request/response examples, and documented error
-responses (422/502/…). The non-diagnostic disclaimer is stated in the API
-description and returned by `/model-info` and `/recommend`.
+**Swagger.** The OpenAPI docs include a description, version, tags, a summary
+and description for each route, request and response examples, and the error
+responses (422, 502 and so on). The non-diagnostic disclaimer is part of the API
+description and is also returned by `/model-info` and `/recommend`.
 
-**CORS** — allows the Streamlit origins (`:8501`, `:8502`) by default
-(`ASSAY_CORS_ORIGINS` to override).
+**CORS.** The Streamlit ports (`:8501`, `:8502`) are allowed by default. Set
+`ASSAY_CORS_ORIGINS` to change this.
 
 ---
 
-## 4. Safety carried through the API
+## 4. Safety
 
-Same guarantees as the engine, surfaced over HTTP: `/predict` and `/recommend`
-never diagnose; flag-only markers appear under `signpost` (→ clinician), not
-advice; `urgent_referral` / `urgent_note` flag prompt-attention cases; every
-recommendation cites evidence and the response includes the `groundedness` audit
-and the disclaimer.
+The API keeps the same safeguards as the engine. `/predict` and `/recommend`
+never diagnose. Flag-only markers are listed under `signpost` for discussion
+with a clinician rather than turned into advice. `urgent_referral` and
+`urgent_note` mark results that need prompt attention. Every recommendation
+cites evidence, and the response includes the `groundedness` audit and the
+disclaimer.
 
 ---
 
 ## 5. Verification
 
-- **8/8 API tests** (`tests/test_api.py`, FastAPI TestClient, offline): health &
-  model-info, predict OK, validation → 422 envelope, retrieve by severity+flags,
-  retrieve requires-a-signal → 422, upload JSON, upload unsupported → 422, and
-  `/recommend` degrading gracefully to a typed **502** without an LLM.
-- **Live server** (uvicorn): all six paths in `/openapi.json`; `/predict` →
-  `serious`; `/model-info` → ruleset 1.1, RF macro-F1 0.868, RAG 32/all-MiniLM-L6-v2,
-  27 biomarkers; `/recommend` → 502 `llm_unavailable` with `X-Request-ID`.
-- No regressions: **63/63 tests** across all phases. The shared biomarker
-  catalog/parser were lifted into `app.ingestion` (used by both the API and the
-  dashboard); Streamlit still imports and runs.
-
-**Phase 7 exit criteria met.** Remaining: Phase 11 (dissertation write-up).
+- **`tests/test_api.py`**, 8 tests using TestClient, offline: health and
+  model-info, a valid `/predict`, the 422 error for invalid input, `/retrieve` by
+  severity and flags, the 422 when `/retrieve` gets nothing to search with, JSON
+  upload, the 422 for an unsupported file type, and `/recommend` returning **502**
+  without an LLM.
+- **Running server** (uvicorn): all six paths appear in `/openapi.json`;
+  `/predict` returns `serious` for the sample patient; `/model-info` reports
+  ruleset 1.1, model macro-F1 0.868, 32 indexed passages with all-MiniLM-L6-v2,
+  and 27 biomarkers; `/recommend` returns 502 `llm_unavailable` with an
+  `X-Request-ID` header.
+- All 63 tests pass. The biomarker catalog and report parser were moved into
+  `app.ingestion` so the API and the dashboard share the same code.

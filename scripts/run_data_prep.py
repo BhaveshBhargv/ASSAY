@@ -1,12 +1,8 @@
-"""
-run_data_prep.py — Phase 2 entrypoint.
+"""Build the NHANES training dataset.
 
-Usage:
-    python -m scripts.run_data_prep --download        # fetch XPT then build
-    python -m scripts.run_data_prep                   # build from cached XPT
-    python -m scripts.run_data_prep --impute knn      # KNN instead of median
-
-Run from the project root so `src` is importable, or `pip install -e .`.
+    python -m scripts.run_data_prep --download        # download the XPT files first
+    python -m scripts.run_data_prep                   # use the files already downloaded
+    python -m scripts.run_data_prep --impute knn      # KNN imputation instead of median
 """
 from __future__ import annotations
 
@@ -15,12 +11,11 @@ import logging
 import sys
 from pathlib import Path
 
-# Make src/ importable when run as a script.
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from data_prep.download import download_all          # noqa: E402
-from data_prep.pipeline import run_pipeline           # noqa: E402
+from data_prep.download import download_all  # noqa: E402
+from data_prep.pipeline import run_pipeline  # noqa: E402
 
 
 def main() -> None:

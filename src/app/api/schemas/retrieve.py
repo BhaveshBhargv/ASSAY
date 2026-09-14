@@ -1,4 +1,4 @@
-"""retrieve.py — /retrieve request/response (RAG guideline search)."""
+"""Request and response models for /retrieve."""
 from __future__ import annotations
 
 from typing import Literal, Optional

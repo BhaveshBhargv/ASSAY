@@ -1,21 +1,9 @@
-"""
-guards.py — safety net enforcing the four hard rules after generation.
+"""Safety checks run on the generated report.
 
-Two independent guards run on the parsed report:
-
-1. Non-diagnostic guard  — regex scan for diagnostic phrasing ("you have X",
-   "you are diabetic", "diagnosed with ...", "this confirms ..."). Violations are
-   recorded (and surfaced as a Phase-9 safety metric); the prompt already forbids
-   them, but we never trust the model blindly.
-
-2. Groundedness verifier — the requested second pass. Deterministically:
-     • strips any evidence id an item cites that isn't in the retrieved pack;
-     • DROPS advice items left with zero valid citations (ungrounded);
-     • DROPS items with an empty rationale (rule: always explain why);
-   then reports a groundedness score. An optional LLM entailment recheck can add a
-   semantic "is this advice actually supported by Ei?" check on top.
-
-The verifier returns a NEW report (kept items only) plus a structured audit dict.
+scan_diagnostic looks for wording that diagnoses the reader ("you have
+diabetes"). verify drops advice that doesn't cite the retrieved evidence or
+has no rationale, and records how much of the report was grounded. It can also
+make a second LLM call to check each item really is supported by its evidence.
 """
 from __future__ import annotations
 
@@ -30,9 +18,8 @@ from .report import ADVICE_SECTIONS, AdviceItem, RecommendationReport
 
 log = logging.getLogger(__name__)
 
-# Phrases that assert a DISEASE diagnosis about the reader. Deliberately scoped to
-# disease attribution so neutral biomarker facts ("you have low HDL") and safe
-# disclaimers ("this is not a diagnosis") are NOT flagged.
+# Only phrases that say the reader has a disease. Plain facts ("you have low HDL")
+# and disclaimers ("this is not a diagnosis") shouldn't match.
 _DISEASE = (r"(?:diabetes|pre-?diabetes|hypertension|anaemia|anemia|cancer|"
             r"(?:kidney|liver|heart|cardiovascular|fatty liver|coronary) disease|"
             r"metabolic syndrome|ckd|cvd|(?:kidney|heart|liver) failure)")
@@ -73,7 +60,7 @@ class GuardReport:
 
 
 def scan_diagnostic(report: RecommendationReport) -> list[str]:
-    """Return the offending snippets of any diagnostic phrasing found."""
+    """Texts in the report that contain diagnostic wording."""
     hits: list[str] = []
     texts = [report.explanation]
     for _sec, item in report.all_items():
@@ -91,7 +78,7 @@ def verify(
     provider: ILLMProvider | None = None,
     llm_recheck: bool = C.LLM_ENTAILMENT_RECHECK,
 ) -> tuple[RecommendationReport, GuardReport]:
-    """Ground-check + non-diagnostic scan. Returns (cleaned_report, audit)."""
+    """Check citations and diagnostic wording. Returns (cleaned_report, audit)."""
     valid_ids = {e.id for e in evidence}
     ev_by_id = {e.id: e for e in evidence}
     audit = GuardReport()
@@ -133,7 +120,7 @@ def verify(
 
 
 def _entailed(provider: ILLMProvider, item: AdviceItem, evidence: list[EvidenceItem]) -> bool:
-    """Optional heavier check: ask the model whether the advice is supported."""
+    """Ask the model whether the advice is supported by its evidence."""
     ev = "\n\n".join(e.render() for e in evidence)
     system = ("You check whether a piece of lifestyle advice is directly supported by "
               "the provided evidence. Answer with exactly 'YES' or 'NO'.")
@@ -142,6 +129,6 @@ def _entailed(provider: ILLMProvider, item: AdviceItem, evidence: list[EvidenceI
     try:
         ans = provider.complete(system, user).strip().upper()
         return ans.startswith("YES")
-    except Exception:  # pragma: no cover - never let the recheck break generation
+    except Exception:  # pragma: no cover
         log.warning("entailment recheck failed; keeping item")
         return True

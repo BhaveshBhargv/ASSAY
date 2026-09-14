@@ -1,9 +1,7 @@
-"""
-splitter.py — recursive character text splitter (no external dependency).
+"""Split long text into overlapping chunks.
 
-Splits long text (e.g. parsed PDF pages) into overlapping chunks, preferring
-natural boundaries (paragraph → line → sentence → word). Curated corpus passages
-are short and typically pass through as a single chunk.
+Breaks on paragraphs where possible, then lines, sentences and finally words.
+Curated passages are short, so they normally stay as a single chunk.
 """
 from __future__ import annotations
 
@@ -24,7 +22,6 @@ class RecursiveTextSplitter:
         pieces = self._split_recursive(text, 0)
         return self._merge(pieces)
 
-    # ------------------------------------------------------------------ #
     def _split_recursive(self, text: str, sep_idx: int) -> list[str]:
         if len(text) <= self.chunk_size or sep_idx >= len(_SEPARATORS):
             return [text]
@@ -48,7 +45,7 @@ class RecursiveTextSplitter:
             else:
                 if cur.strip():
                     chunks.append(cur.strip())
-                # carry overlap tail into the next chunk
+                # start the next chunk with the end of this one
                 tail = cur[-self.chunk_overlap:] if self.chunk_overlap else ""
                 cur = tail + p
         if cur.strip():

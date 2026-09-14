@@ -1,13 +1,8 @@
-"""
-outliers.py — two-stage outlier handling.
+"""Outlier handling, in two steps.
 
-Stage A (stateless, pre-split): clinical plausibility bounds. Physiologically
-impossible values are data errors, not real extremes, so they become NaN and
-flow into imputation. Uses fixed clinical constants -> no train/test leakage.
-
-Stage B (fit on train only, post-split): winsorisation at the 1st/99th
-percentile to tame genuine but extreme measurements without deleting rows.
-Percentile bounds are learned from TRAIN and applied to both splits.
+Before the train/test split, impossible values (outside fixed plausibility
+bounds) are set to NaN so they get imputed later. After the split, values are
+winsorised to the 1st and 99th percentiles of the training set.
 """
 from __future__ import annotations
 
@@ -18,7 +13,7 @@ from .config import ALL_BIOMARKERS
 
 
 def apply_plausibility(df: pd.DataFrame, thresholds: dict) -> pd.DataFrame:
-    """Set physiologically impossible biomarker values to NaN (stateless)."""
+    """Set physiologically impossible values to NaN."""
     out = df.copy()
     for name, bounds in thresholds.get("plausibility", {}).items():
         if name not in out.columns:
@@ -33,7 +28,7 @@ def apply_plausibility(df: pd.DataFrame, thresholds: dict) -> pd.DataFrame:
 def fit_winsor_bounds(
     train: pd.DataFrame, cols: list[str] | None = None, lower: float = 0.01, upper: float = 0.99
 ) -> dict[str, tuple[float, float]]:
-    """Learn winsorisation bounds from the training split only."""
+    """Winsorisation bounds from the training set."""
     cols = cols or [c for c in ALL_BIOMARKERS if c in train.columns]
     bounds: dict[str, tuple[float, float]] = {}
     for c in cols:
@@ -43,7 +38,7 @@ def fit_winsor_bounds(
 
 
 def apply_winsor(df: pd.DataFrame, bounds: dict[str, tuple[float, float]]) -> pd.DataFrame:
-    """Clip values to the learned [lo, hi] bounds."""
+    """Clip values to the given bounds."""
     out = df.copy()
     for c, (lo, hi) in bounds.items():
         if c in out.columns:

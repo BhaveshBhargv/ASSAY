@@ -1,9 +1,9 @@
-# Blood-test lifestyle recommender — Python dependencies (Python 3.11–3.13).
-# sentence-transformers pulls PyTorch. To avoid the multi-GB CUDA build on a
-# machine without an NVIDIA GPU, install the CPU wheel first:
+# Python 3.11 to 3.13.
+# sentence-transformers installs PyTorch. Without an NVIDIA GPU, install the CPU
+# build first to skip the multi-GB CUDA download:
 #   pip install torch --index-url https://download.pytorch.org/whl/cpu
 
-# --- data & ML -------------------------------------------------------------
+# data and ML
 pandas>=2.0
 numpy>=1.24
 scikit-learn>=1.3
@@ -13,26 +13,26 @@ matplotlib>=3.7
 PyYAML>=6.0
 requests>=2.31
 
-# --- RAG (retrieval) -------------------------------------------------------
+# retrieval
 sentence-transformers>=2.2
 faiss-cpu>=1.7
 pypdf>=3.0
 
-# --- LLM recommendation engine (LangChain, behind a port) ------------------
+# LLM recommendations
 pydantic>=2.5
 langchain>=0.2
 langchain-core>=0.2
-langchain-ollama>=0.1        # local provider
-langchain-anthropic>=0.1     # hosted Anthropic
-langchain-openai>=0.1        # OpenRouter (OpenAI-compatible) + OpenAI
-python-dotenv>=1.0           # load API keys from a .env file
+langchain-ollama>=0.1        # Ollama (local)
+langchain-anthropic>=0.1     # Anthropic
+langchain-openai>=0.1        # OpenRouter, which uses the OpenAI API format
+python-dotenv>=1.0           # reads API keys from .env
 
-# --- API (FastAPI) ---------------------------------------------------------
+# API
 fastapi>=0.110
 uvicorn>=0.27
 python-multipart>=0.0.9
 
-# --- dashboard (Streamlit) -------------------------------------------------
+# dashboard
 streamlit==1.49.1
 plotly>=5.18
 fpdf2>=2.7

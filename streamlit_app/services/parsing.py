@@ -1,9 +1,4 @@
-"""
-parsing.py — re-export the shared report parser for the dashboard.
-
-The implementation now lives in the engine (`app.ingestion.report_parser`) so the
-API and the UI parse blood reports identically.
-"""
+"""Re-exports the report parser so the dashboard and the API use the same code."""
 from __future__ import annotations
 
 from app.ingestion.report_parser import ParseResult, parse_upload

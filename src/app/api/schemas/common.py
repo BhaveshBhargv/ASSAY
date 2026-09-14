@@ -1,9 +1,4 @@
-"""
-common.py — shared request/response models and validators.
-
-`Demographics` and the biomarker-map validator are reused across endpoints so
-validation rules live in exactly one place.
-"""
+"""Request and response models shared by several endpoints."""
 from __future__ import annotations
 
 from typing import Literal, Optional
@@ -14,7 +9,7 @@ from app.ingestion.catalog import ALL_CODES
 
 _CODES = set(ALL_CODES)
 
-# Example panel reused in OpenAPI docs.
+# Example values used in the API docs.
 EXAMPLE_BIOMARKERS = {
     "hba1c_pct": 6.1, "total_chol_mgdl": 232, "hdl_mgdl": 34,
     "triglycerides_mgdl": 205, "alt": 46,

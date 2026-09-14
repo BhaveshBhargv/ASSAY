@@ -1,4 +1,4 @@
-"""controllers — FastAPI routers (one per resource)."""
+"""API routers, one per resource."""
 from __future__ import annotations
 
 from .model_info_controller import router as model_info_router

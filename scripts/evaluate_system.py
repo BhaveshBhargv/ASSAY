@@ -1,12 +1,9 @@
-"""
-evaluate_system.py — Phase 9 end-to-end evaluation.
+"""Run the ML, RAG and LLM evaluations.
 
-Runs the ML, RAG, and LLM evaluations, writes a consolidated JSON summary and all
-plots to reports/phase9/, and prints a readable summary.
+The summary JSON and the plots are written to reports/phase9/.
 
-Usage:
-    python scripts/evaluate_system.py                 # ML + RAG + LLM (LLM needs Ollama)
-    python scripts/evaluate_system.py --no-llm        # skip the LLM step
+    python scripts/evaluate_system.py                 # all three (the LLM step needs Ollama)
+    python scripts/evaluate_system.py --no-llm
     python scripts/evaluate_system.py --provider anthropic
 """
 from __future__ import annotations
@@ -20,7 +17,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from app.eval import config as C          # noqa: E402
+from app.eval import config as C  # noqa: E402
 from app.eval.ml_eval import evaluate_ml  # noqa: E402
 from app.eval.rag_eval import evaluate_rag  # noqa: E402
 from app.eval.llm_eval import run_llm_eval  # noqa: E402

@@ -1,12 +1,10 @@
-"""
-inputs.py — sidebar controls and the blood-panel entry form.
+"""Sidebar controls and the biomarker entry form.
 
-Owns all widget state. Loading a sample or reading a file writes values into the
-controlled state (`age_value`, `sex_value`, and the ``in_<code>`` keys) and reruns,
-so the form reflects them on the next pass. Age and sex are empty by default and
-required before analysis — except when a sample patient is loaded (which fills
-them). The model-only demographics (ethnicity/income/education) use fixed sensible
-defaults and are no longer asked of the user.
+Loading a sample or reading a file writes the values into session state
+(age_value, sex_value and the in_<code> keys) and reruns, so the form shows them
+on the next pass. Age and sex start empty and must be filled in unless a sample
+is loaded. Ethnicity, income and education aren't asked for; fixed defaults are
+used instead.
 """
 from __future__ import annotations
 
@@ -18,7 +16,7 @@ from sample_data.samples import SAMPLES
 from services.parsing import parse_upload
 from ui.metadata import ALL_CODES, PANELS, display, reference_range
 
-# Fixed model-only demographics (used by the RF; not clinically meaningful to ask).
+# model inputs that the user isn't asked for
 _DEFAULT_EXTRA = {"eth_code": 3, "pir": 2.5, "educ_code": 4}
 _SEX_OPTIONS = ["male", "female"]
 
@@ -46,7 +44,7 @@ def init_state() -> None:
 
 
 def _apply_values(bio: dict) -> None:
-    """Push loaded biomarker values into the widget state, clearing unset fields."""
+    """Fill the form with these values and clear every other field."""
     for code in ALL_CODES:
         st.session_state[f"in_{code}"] = float(bio.get(code, 0.0) or 0.0)
 
@@ -66,8 +64,7 @@ def render_sidebar() -> Settings:
     source = sb.radio("Source", ["Sample patient", "Upload file", "Manual entry"],
                       label_visibility="collapsed")
 
-    # Switching report source clears the patient details so they're re-entered
-    # for the new report (a sample re-fills them on load).
+    # Changing the source clears age and sex. Loading a sample fills them again.
     if st.session_state.get("_prev_source") != source:
         st.session_state["_prev_source"] = source
         st.session_state["age_value"] = None
@@ -105,7 +102,6 @@ def render_sidebar() -> Settings:
             st.session_state["parse_notes"] = []
             st.rerun()
 
-    # --- patient (age + sex required, except for samples) ----------------- #
     sb.markdown("#### Patient")
     age = sb.number_input("Age", min_value=18, max_value=100, step=1,
                           value=st.session_state.get("age_value"), placeholder="e.g. 54")
@@ -119,7 +115,7 @@ def render_sidebar() -> Settings:
     if source != "Sample patient" and (age is None or sex is None):
         sb.caption("⚠️ Age and sex are required to analyse.")
 
-    # Recommendations generate automatically (OpenRouter by default); no controls.
+    # LLM settings are fixed; there are no controls for them in the UI.
     generate, provider, model, recheck, k = True, "openrouter", "", False, 10
 
     sb.caption("Recommendations generate automatically after the analysis. "
@@ -132,7 +128,7 @@ def render_sidebar() -> Settings:
 
 
 def render_biomarker_form() -> None:
-    """Six panel tabs of number inputs. Values live in ``in_<code>`` widget keys."""
+    """A tab of number inputs per panel. Values are stored under in_<code>."""
     sex = st.session_state.get("sex_value") or "male"
     tabs = st.tabs([p for p, _ in PANELS])
     for tab, (_panel, codes) in zip(tabs, PANELS):

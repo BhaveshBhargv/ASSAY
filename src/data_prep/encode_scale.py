@@ -1,20 +1,10 @@
-"""
-encode_scale.py — categorical encoding + optional scaling, with train/test alignment.
+"""One-hot encoding and scaling for the feature matrix.
 
-The model is intentionally CLINICAL-ONLY: biomarkers + age + sex. Socio-demographic
-inputs (ethnicity, income-to-poverty ratio, education) were dropped — a blood
-report doesn't carry them, and they aren't clinically actionable, so the model
-must not depend on them.
-
-Encoding:
-  sex_code                      -> one-hot (nominal; fixed categories so train and
-                                   test always share identical columns)
-  age_band                      -> kept as an ordinal integer
-Scaling:
-  The Random Forest is scale-invariant, so we return an UNSCALED matrix for it.
-  We ALSO return a StandardScaler-transformed copy (fit on train only) for any
-  distance-based / RAG-side use. Demonstrating that trees need no scaling is a
-  deliberate design point.
+The model only uses biomarkers, age and sex. Ethnicity, income and education
+were dropped because a blood report doesn't include them. Sex is one-hot encoded
+with fixed categories so train and test always end up with the same columns.
+The Random Forest uses the unscaled matrix; a scaled copy fitted on the training
+set is saved as well.
 """
 from __future__ import annotations
 
@@ -24,12 +14,10 @@ from sklearn.preprocessing import StandardScaler
 from .config import FEATURE_BIOMARKERS
 from .features import ENGINEERED_NUMERIC, ENGINEERED_ORDINAL
 
-# Fixed nominal categories.
 _SEX_CATS = [1, 2]
 
-# Numeric (continuous) features carried through (flag-only & vitamin_d excluded).
+# Continuous features (no flag-only markers or vitamin D).
 _NUMERIC_BASE = ["age"] + FEATURE_BIOMARKERS + ENGINEERED_NUMERIC
-# Ordinal integer features.
 _ORDINAL = list(ENGINEERED_ORDINAL)
 
 
@@ -41,7 +29,7 @@ def _one_hot(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def build_feature_matrix(df: pd.DataFrame) -> pd.DataFrame:
-    """Assemble the model-ready UNSCALED feature matrix (leakage-safe columns only)."""
+    """The unscaled feature matrix the model is trained on."""
     numeric = [c for c in _NUMERIC_BASE if c in df.columns]
     ordinal = [c for c in _ORDINAL if c in df.columns]
     base = df[numeric + ordinal].apply(pd.to_numeric, errors="coerce")
@@ -51,7 +39,7 @@ def build_feature_matrix(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def fit_scaler(X_train: pd.DataFrame) -> tuple[StandardScaler, list[str]]:
-    """Fit a StandardScaler on the continuous columns of TRAIN only."""
+    """Fit a StandardScaler on the continuous columns of the training set."""
     cont = [c for c in _NUMERIC_BASE if c in X_train.columns]
     scaler = StandardScaler().fit(X_train[cont])
     return scaler, cont

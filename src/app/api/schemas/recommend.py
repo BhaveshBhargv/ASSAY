@@ -1,4 +1,4 @@
-"""recommend.py — /recommend request/response (full grounded pipeline)."""
+"""Request and response models for /recommend."""
 from __future__ import annotations
 
 from typing import Literal, Optional

@@ -1,8 +1,7 @@
-"""
-test_rag.py — Phase 5 tests.
+"""RAG tests.
 
-Splitter/loader tests run offline. Retrieval tests need the built index and the
-embedding model; they skip gracefully if the index is absent.
+The retrieval test needs the built index and the embedding model, and is skipped
+if the index isn't there.
 
 Run:  python tests/test_rag.py
 """
@@ -14,9 +13,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from app.rag import config as C                 # noqa: E402
-from app.rag.loaders import load_curated_yaml   # noqa: E402
-from app.rag.retriever import build_query       # noqa: E402
+from app.rag import config as C  # noqa: E402
+from app.rag.loaders import load_curated_yaml  # noqa: E402
+from app.rag.retriever import build_query  # noqa: E402
 from app.rag.splitter import RecursiveTextSplitter  # noqa: E402
 
 
@@ -30,7 +29,7 @@ def test_splitter_long_text_chunks_with_bound():
     text = ("Sentence one is here. " * 40)
     chunks = s.split(text)
     assert len(chunks) > 1
-    assert all(len(c) <= 120 + 20 for c in chunks)  # allow overlap slack
+    assert all(len(c) <= 120 + 20 for c in chunks)  # allow for the overlap
 
 
 def test_curated_corpus_loads_with_provenance():
@@ -38,7 +37,6 @@ def test_curated_corpus_loads_with_provenance():
     assert len(chunks) >= 25
     assert all(c.source in {"NICE", "NHS", "WHO"} for c in chunks)
     assert all(c.text for c in chunks)
-    # every passage cites a source (+usually a code)
     assert all(c.citation() for c in chunks)
 
 
@@ -58,8 +56,8 @@ def test_retrieval_if_index_exists():
     r = GuidelineRetriever.load()
     res = r.retrieve("high cholesterol diet advice", k=3)
     assert len(res) == 3
-    assert res[0].score >= res[-1].score           # sorted
-    # a cholesterol query should surface a lipid passage near the top
+    assert res[0].score >= res[-1].score
+    # a cholesterol query should bring up a lipid passage first
     top_bm = set(res[0].chunk.biomarkers)
     assert top_bm & {"total_chol_mgdl", "ldl_mgdl", "hdl_mgdl"}
     print("retrieval OK — top:", res[0].chunk.citation(), "-", res[0].chunk.title)
@@ -68,7 +66,8 @@ def test_retrieval_if_index_exists():
 def _run_all():
     fns = [v for k, v in globals().items() if k.startswith("test_") and callable(v)]
     for fn in fns:
-        fn(); print(f"PASS {fn.__name__}")
+        fn()
+        print(f"PASS {fn.__name__}")
     print(f"\n{len(fns)} tests passed")
 
 

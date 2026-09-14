@@ -1,21 +1,16 @@
-"""
-pipeline.py — end-to-end Phase 2 orchestration.
+"""Runs the full data preparation.
 
-Ordering is deliberate and defensible:
-  1. merge cycles                      (SEQN join, provenance)
-  2. plausibility -> NaN               (stateless clinical constants)
-  3. BUILD LABELS                       (on observed values, BEFORE imputation,
-                                         so Layer-1 severity is never fabricated)
-  4. drop rows missing mandatory labs   (integrity)
-  5. stratified train/test split        (FIT NOTHING before this line)
-  6. winsorise (fit on train)           (tame real extremes)
-  7. impute supplementary (fit on train)(retain the full sample)
-  8. feature engineering (stateless)
-  9. build UNSCALED feature matrix (RF) + SCALED copy (fit on train)
- 10. persist datasets + fitted artifacts + methods report
-
-Every fitted object (winsor bounds, imputer, scaler) is learned from TRAIN only,
-then applied to TEST — no leakage.
+The order of the steps matters:
+  1. merge the cycles
+  2. set implausible values to NaN
+  3. build the labels, before any imputation
+  4. drop rows missing a mandatory marker
+  5. stratified train/test split (nothing is fitted before this point)
+  6. winsorise, fitted on train
+  7. impute, fitted on train
+  8. add the engineered features
+  9. build the feature matrices, unscaled and scaled
+ 10. save everything
 """
 from __future__ import annotations
 
@@ -44,7 +39,7 @@ log = logging.getLogger(__name__)
 
 
 def _select_working_columns(df: pd.DataFrame) -> pd.DataFrame:
-    """Keep biomarkers, demographics, label-only and design columns; drop the rest."""
+    """Keep only the columns used later on."""
     wanted = (
         ["SEQN"]
         + ALL_BIOMARKERS
@@ -67,43 +62,42 @@ def run_pipeline(
     art_dir = out_dir / "artifacts"
     art_dir.mkdir(exist_ok=True)
 
-    # 1-2. merge + plausibility
+    # 1-2. merge and plausibility
     merged = build_merged()
     merged = _select_working_columns(merged)
     merged = outliers.apply_plausibility(merged, thresholds)
 
-    # 2b. adult-only cohort (paediatric records use different reference ranges
-    #     and lack the adult diagnosis/medication questionnaires).
+    # adults only
     before = len(merged)
     merged = merged[merged["age"] >= ADULT_MIN_AGE].reset_index(drop=True)
     log.info("adult filter (age >= %d): %d -> %d rows", ADULT_MIN_AGE, before, len(merged))
 
-    # 3. labels (before imputation)
+    # 3. labels
     labelled = build_labels(merged, thresholds)
     rpt = label_report(labelled)
     log.info("label report: %s", rpt)
 
-    # 4. integrity drop
+    # 4. drop rows missing mandatory markers
     clean = missing.drop_missing_mandatory(labelled)
 
-    # 5. stratified split
+    # 5. split
     train, test = train_test_split(
         clean, test_size=test_size, random_state=seed, stratify=clean["label"]
     )
     train = train.reset_index(drop=True)
     test = test.reset_index(drop=True)
 
-    # 6. winsorise (fit on train)
+    # 6. winsorise
     wbounds = outliers.fit_winsor_bounds(train)
     train = outliers.apply_winsor(train, wbounds)
     test = outliers.apply_winsor(test, wbounds)
 
-    # 7. impute supplementary + soft predictors (fit on train)
+    # 7. impute
     imputer, imp_cols = missing.fit_imputer(train, strategy=impute_strategy)
     train = missing.apply_imputer(train, imputer, imp_cols)
     test = missing.apply_imputer(test, imputer, imp_cols)
 
-    # 8. feature engineering (stateless)
+    # 8. engineered features
     train = features.add_features(train)
     test = features.add_features(test)
 
@@ -115,7 +109,7 @@ def run_pipeline(
     X_test_scaled = encode_scale.apply_scaler(X_test, scaler, cont)
     y_train, y_test = train["label"], test["label"]
 
-    # 10. persist
+    # 10. save
     train.to_csv(out_dir / "train.csv", index=False)
     test.to_csv(out_dir / "test.csv", index=False)
     X_train.to_csv(out_dir / "X_train.csv", index=False)

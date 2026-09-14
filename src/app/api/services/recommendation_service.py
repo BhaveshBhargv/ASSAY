@@ -1,9 +1,7 @@
-"""
-recommendation_service.py — the /recommend use case: full grounded pipeline.
+"""The full /recommend pipeline: assess, retrieve, generate and verify.
 
-assess (rules+RF+fusion) → retrieve evidence → generate (LLM) → verify (guards).
-LLM/connection failures are converted to a typed LLMUnavailableError so the
-controller returns a clean 502 rather than a stack trace.
+LLM and connection errors are raised as LLMUnavailableError, so the client gets
+a clean 502 rather than a server error.
 """
 from __future__ import annotations
 
@@ -48,7 +46,7 @@ class RecommendationService:
         except GenerationError as exc:
             raise LLMUnavailableError(f"The model returned an unusable response: {exc}",
                                       detail={"provider": provider.name}) from exc
-        except Exception as exc:  # noqa: BLE001 - typically no daemon / network
+        except Exception as exc:  # noqa: BLE001
             raise LLMUnavailableError(
                 f"Could not reach the language model ({req.provider}). Is it running?",
                 detail={"provider": req.provider, "error": str(exc)}) from exc

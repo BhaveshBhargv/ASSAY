@@ -1,12 +1,7 @@
-"""
-generator.py — call the LLM and parse its output into a validated report.
+"""Calls the LLM and parses its reply into a RecommendationReport.
 
-Responsibility (single): given a system+user prompt via the ILLMProvider port,
-obtain the completion and turn it into a `RecommendationReport`. Local models are
-not always perfectly obedient about JSON, so parsing is defensive: try strict
-JSON, then extract the first balanced JSON object from the text, then validate
-against the Pydantic schema. Prompt-building and grounding live elsewhere; this
-module only bridges "prompt -> validated object".
+Models don't always return clean JSON, so parsing tries the whole reply first,
+then a fenced code block, then the first balanced {...} in the text.
 """
 from __future__ import annotations
 
@@ -23,7 +18,7 @@ log = logging.getLogger(__name__)
 
 
 class GenerationError(RuntimeError):
-    """Raised when the model output cannot be parsed into a valid report."""
+    """Raised when the model's output can't be turned into a valid report."""
 
 
 def generate_report(provider: ILLMProvider, system: str, user: str) -> RecommendationReport:
@@ -37,17 +32,15 @@ def generate_report(provider: ILLMProvider, system: str, user: str) -> Recommend
         raise GenerationError(f"model output failed schema validation: {exc}") from exc
 
 
-# --- robust JSON extraction ------------------------------------------------ #
-
 _FENCE_RE = re.compile(r"```(?:json)?\s*(\{.*?\})\s*```", re.DOTALL)
 
 
 def _extract_json(text: str) -> dict | None:
-    """Best-effort recovery of a single JSON object from an LLM response."""
+    """Pull a single JSON object out of an LLM reply, or return None."""
     if not text:
         return None
 
-    # 1) whole string is JSON
+    # the whole reply
     stripped = text.strip()
     try:
         obj = json.loads(stripped)
@@ -55,7 +48,7 @@ def _extract_json(text: str) -> dict | None:
     except json.JSONDecodeError:
         pass
 
-    # 2) fenced ```json ... ``` block
+    # a ```json ... ``` block
     m = _FENCE_RE.search(text)
     if m:
         try:
@@ -63,7 +56,7 @@ def _extract_json(text: str) -> dict | None:
         except json.JSONDecodeError:
             pass
 
-    # 3) first balanced { ... } span
+    # the first balanced {...}
     span = _first_balanced_object(text)
     if span:
         try:

@@ -1,4 +1,4 @@
-"""retrieval_service.py — the /retrieve use case: RAG guideline search."""
+"""Guideline search for /retrieve."""
 from __future__ import annotations
 
 import logging

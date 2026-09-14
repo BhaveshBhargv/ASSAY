@@ -1,9 +1,4 @@
-"""
-mappers.py — translate engine domain objects into API response schemas.
-
-Kept separate so services stay focused on orchestration and the wire format lives
-in exactly one place.
-"""
+"""Converts engine objects into API response models."""
 from __future__ import annotations
 
 from ..schemas.common import AssessmentOut, BiomarkerResultOut, MarkerOut, RiskDriverOut

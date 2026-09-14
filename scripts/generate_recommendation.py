@@ -1,15 +1,12 @@
-"""
-generate_recommendation.py — Phase 6 entrypoint.
+"""Run the whole pipeline on a sample patient and print the report.
 
-Runs the full pipeline (rules -> RF -> fusion -> RAG -> LLM -> guards) on a sample
-patient and prints the grounded report. Requires a running Ollama with the model
-pulled (`ollama pull llama3.1`) unless a different provider is chosen.
+Needs Ollama running with the model pulled (`ollama pull llama3.1`), unless you
+pick another provider.
 
-Usage:
     python scripts/generate_recommendation.py
     python scripts/generate_recommendation.py --provider anthropic
     python scripts/generate_recommendation.py --no-rf --k 5
-    python scripts/generate_recommendation.py --json          # machine-readable
+    python scripts/generate_recommendation.py --json
 """
 from __future__ import annotations
 
@@ -24,8 +21,8 @@ sys.path.insert(0, str(ROOT / "src"))
 
 from app.recommend import RecommendationEngine  # noqa: E402
 
-# A sample de-identified patient: raised HbA1c + low HDL + high triglycerides —
-# the classic metabolic cluster that no single "severe" rule necessarily catches.
+# Made-up patient with raised HbA1c, low HDL and high triglycerides. No single
+# result is severe, but together they're the usual metabolic risk pattern.
 SAMPLE_DEMOGRAPHICS = {"age": 54, "sex": "male", "eth_code": 3, "pir": 2.5, "educ_code": 4}
 SAMPLE_BIOMARKERS = {
     "hba1c_pct": 6.1,

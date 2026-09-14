@@ -1,8 +1,6 @@
-"""
-run_api.py — launch the FastAPI backend with `src` on the path.
+"""Start the FastAPI backend.
 
-Usage:
-    python scripts/run_api.py                 # http://localhost:8000  (docs at /docs)
+    python scripts/run_api.py                 # http://localhost:8000, docs at /docs
     python scripts/run_api.py --reload
     ASSAY_LOG_LEVEL=DEBUG python scripts/run_api.py
 """

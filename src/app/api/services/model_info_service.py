@@ -1,4 +1,4 @@
-"""model_info_service.py — the /model-info use case: capabilities & provenance."""
+"""Builds the /model-info response."""
 from __future__ import annotations
 
 from app.ingestion.catalog import ALL_CODES, biomarker_meta

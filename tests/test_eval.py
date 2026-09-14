@@ -1,8 +1,7 @@
-"""
-test_eval.py — Phase 9 evaluation logic (offline).
+"""Evaluation metric tests.
 
-RAG evaluation runs against the built index; LLM metric logic is tested with a
-fake embedder so it needs no model. Retrieval tests skip if the index is absent.
+The LLM metrics are tested with a fake embedder, so no model is needed. The RAG
+test is skipped if the index hasn't been built.
 
 Run:  python tests/test_eval.py
 """
@@ -23,8 +22,7 @@ from app.recommend.report import AdviceItem, RecommendationReport  # noqa: E402
 
 
 class _FakeEmbedder:
-    """Deterministic embedder: identical texts → identical unit vectors, so a
-    grounded item whose evidence text matches scores cosine 1, a mismatch ~0."""
+    """Counts a handful of keywords, so texts sharing a keyword have a high cosine."""
     _vocab = {"walk": 0, "diet": 1, "sleep": 2, "hba1c": 3, "hdl": 4, "unrelated": 5}
 
     def embed(self, texts):
@@ -53,17 +51,17 @@ def _report():
         lifestyle=[AdviceItem(advice="Build in daily walk", rationale="helps hba1c", evidence=["E1"])],
         diet=[AdviceItem(advice="Adopt a healthy diet", rationale="supports hdl", evidence=["E2"])],
         exercise=[AdviceItem(advice="Take an unrelated supplement",
-                             rationale="unrelated claim", evidence=["E9"])],  # ungrounded
+                             rationale="unrelated claim", evidence=["E9"])],  # E9 doesn't exist
     )
 
 
 def test_score_grounded_and_faithful():
     s = score_recommendation(_report(), _EVIDENCE, _FakeEmbedder(), tau=0.3)
     assert s["total_items"] == 3
-    assert s["grounded_items"] == 2               # E1, E2 valid; E9 not
-    assert s["faithful_items"] == 2               # both grounded items match their evidence
+    assert s["grounded_items"] == 2
+    assert s["faithful_items"] == 2
     assert abs(s["groundedness"] - 2 / 3) < 1e-9
-    assert abs(s["hallucination_rate"] - 1 / 3) < 1e-9  # only the E9 item
+    assert abs(s["hallucination_rate"] - 1 / 3) < 1e-9  # just the E9 item
     assert s["faithfulness_mean_cosine"] > 0.9
 
 
@@ -76,7 +74,7 @@ def test_ungrounded_counts_as_hallucination():
 
 
 def test_unfaithful_grounded_is_hallucination():
-    # grounded (E1 exists) but text is unrelated to the evidence → low cosine
+    # cites E1, but the advice has nothing to do with it
     rep = RecommendationReport(
         explanation="x",
         diet=[AdviceItem(advice="do something unrelated", rationale="unrelated", evidence=["E1"])])
@@ -101,7 +99,7 @@ def test_rag_eval_if_index_exists():
     agg = res["aggregate"]
     assert 0.0 <= agg["precision@1"] <= 1.0
     assert 0.0 <= agg["recall@3"] <= 1.0
-    assert agg["precision@1"] > 0  # a tag-matched query should hit at rank 1
+    assert agg["precision@1"] > 0
     print("rag P@1=%.2f R@3=%.2f ctx=%.2f" % (
         agg["precision@1"], agg["recall@3"], agg["context_relevance_score"]))
 

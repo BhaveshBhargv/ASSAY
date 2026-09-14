@@ -1,4 +1,4 @@
-"""config.py — Phase 9 evaluation settings, test patients, and the RAG gold set."""
+"""Evaluation settings, test patients and the retrieval test queries."""
 from __future__ import annotations
 
 from pathlib import Path
@@ -6,15 +6,14 @@ from pathlib import Path
 PROJECT_ROOT = Path(__file__).resolve().parents[3]
 REPORTS_DIR = PROJECT_ROOT / "reports" / "phase9"
 
-# Faithfulness: an advice item is "faithful" if its text is at least this cosine-
-# similar to one of its cited evidence passages (embedding-based, deterministic).
+# An advice item counts as faithful if its embedding has at least this cosine
+# similarity with one of the passages it cites.
 FAITHFULNESS_TAU = 0.35
 
-# Retrieval K values to report Precision@K / Recall@K at.
+# K values for Precision@K and Recall@K.
 RAG_KS = (1, 3, 5)
 
-# --- test patients (de-identified, illustrative) -------------------------- #
-# Cover the conditions the panel flags, for the LLM evaluation.
+# Made-up patients covering the patterns the panel flags.
 EVAL_PATIENTS: list[dict] = [
     {"name": "Metabolic cluster", "demographics": {"age": 54, "sex": "male"},
      "biomarkers": {"hba1c_pct": 6.1, "fasting_glucose_mgdl": 108, "total_chol_mgdl": 232,
@@ -32,10 +31,8 @@ EVAL_PATIENTS: list[dict] = [
                     "triglycerides_mgdl": 96, "ldl_mgdl": 96}},
 ]
 
-# --- RAG gold set --------------------------------------------------------- #
-# Each query lists the biomarkers a good retrieval SHOULD surface guidance for.
-# Relevance is judged by whether a passage is tagged with any of these codes
-# (a corpus-tag "silver" standard — reproducible, no manual annotation).
+# Retrieval test queries. A passage counts as relevant if it's tagged with any of
+# relevant_codes, so relevance comes from the corpus's own tags, not manual labels.
 RAG_QUERIES: list[dict] = [
     {"name": "Diabetes / raised HbA1c", "severity": "serious",
      "flagged": [{"code": "hba1c_pct", "name": "HbA1c", "status": "high"},

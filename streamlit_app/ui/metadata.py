@@ -1,13 +1,7 @@
-"""
-metadata.py — UI-facing biomarker metadata.
-
-Thin adapter over the shared engine catalog (`app.ingestion.catalog`) so the
-dashboard and the API share one source of truth. `display` keeps the field names
-the form expects.
-"""
+"""Biomarker metadata for the UI, re-exported from app.ingestion.catalog."""
 from __future__ import annotations
 
-from app.ingestion.catalog import (  # re-exported for the UI
+from app.ingestion.catalog import (
     ALL_CODES,
     PANEL_OF,
     PANELS,
@@ -22,5 +16,5 @@ __all__ = ["ALL_CODES", "PANEL_OF", "PANELS", "SYNONYMS", "rule_for",
 
 
 def display(code: str) -> dict:
-    """Name/unit/tier for one biomarker (form label helper)."""
+    """Name, unit and tier of a biomarker, for the form labels."""
     return biomarker_meta(code)

@@ -1,10 +1,7 @@
-"""
-retriever.py — semantic search over the guideline index.
+"""Semantic search over the guideline index.
 
-Turns a fused severity label + flagged biomarkers into a query, embeds it, and
-returns the top-k most relevant guideline passages. Supports an optional
-biomarker-aware re-rank so passages tagged with the patient's flagged markers are
-boosted over generic matches (light hybrid retrieval).
+Passages tagged with one of the patient's flagged biomarkers get a small score
+boost, so they rank above more general matches.
 """
 from __future__ import annotations
 
@@ -28,7 +25,6 @@ class GuidelineRetriever:
         self._store = store
         self._chunks = chunks
 
-    # ------------------------------------------------------------------ #
     @classmethod
     def load(cls, index_dir: Path = C.INDEX_DIR,
              embedder: IEmbedder | None = None) -> "GuidelineRetriever":
@@ -38,12 +34,11 @@ class GuidelineRetriever:
         store.load(C.FAISS_PATH)
         return cls(embedder, store, chunks)
 
-    # ------------------------------------------------------------------ #
     def retrieve(
         self, query: str, k: int = 5, biomarker_boost: tuple[str, ...] = (),
         boost: float = 0.05, pool: int = 20,
     ) -> list[RetrievalResult]:
-        """Semantic top-k, optionally re-ranked toward flagged biomarkers."""
+        """Top k passages for the query, boosting ones tagged with biomarker_boost."""
         qvec = self._embedder.embed([query])[0]
         hits = self._store.search(qvec, k=max(pool, k))
         results = []
@@ -58,7 +53,7 @@ class GuidelineRetriever:
     def retrieve_for_assessment(
         self, severity: str, flagged: list[dict], k: int = 5,
     ) -> list[RetrievalResult]:
-        """flagged: [{code, name, status}, ...] from the rule engine."""
+        """Search using the assessment. flagged is a list of {code, name, status} dicts."""
         query = build_query(severity, flagged)
         codes = tuple(f.get("code", "") for f in flagged)
         return self.retrieve(query, k=k, biomarker_boost=codes)
@@ -69,7 +64,6 @@ class GuidelineRetriever:
 
 
 def build_query(severity: str, flagged: list[dict]) -> str:
-    """Compose a natural-language retrieval query from the assessment."""
     if flagged:
         parts = []
         for f in flagged:
@@ -77,9 +71,8 @@ def build_query(severity: str, flagged: list[dict]) -> str:
             status = f.get("status", "")
             parts.append(f"{status} {name}".strip())
         markers = "; ".join(parts)
-        # Lead with the flagged markers (not a hardcoded condition) so retrieval
-        # isn't biased toward one organ system — a liver/anaemia query must not be
-        # pulled toward cardiometabolic passages by the query wording.
+        # Start with the flagged markers rather than naming a condition, otherwise
+        # a liver or anaemia query gets pulled towards cardiometabolic passages.
         return (f"Lifestyle guidance for {markers}. "
                 f"Evidence-based advice for {severity} health risk.")
     return f"Evidence-based lifestyle recommendations for {severity} health risk."

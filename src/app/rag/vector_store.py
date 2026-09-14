@@ -1,8 +1,7 @@
-"""
-vector_store.py — FAISS vector store adapter (implements IVectorStore).
+"""FAISS vector store.
 
-Uses IndexFlatIP over L2-normalised vectors => exact cosine similarity. Ideal for
-a small, fixed guideline corpus (exact search, zero infra, fully reproducible).
+Uses an exact inner-product index over normalised vectors, i.e. cosine
+similarity. Exact search is plenty fast for a corpus this small.
 """
 from __future__ import annotations
 

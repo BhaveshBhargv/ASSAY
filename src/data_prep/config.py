@@ -1,14 +1,8 @@
-"""
-config.py — Phase 2 configuration loading and canonical schema.
+"""Paths, NHANES variable names and column roles for data preparation.
 
-Single source of truth for:
-  * which NHANES files to pull (from config/nhanes_files.yaml)
-  * clinical thresholds & label rules (from config/clinical_thresholds.yaml)
-  * the canonical variable-name map (raw NHANES codes -> readable names)
-  * which columns are features vs label-only (leakage control)
-
-Keeping all of this here means every downstream module depends on one
-stable contract (Single Responsibility + Dependency Inversion).
+The column lists decide which columns are model features and which are only
+used to build the label, which is what keeps the questionnaire answers out of
+the features.
 """
 from __future__ import annotations
 
@@ -18,9 +12,6 @@ from typing import Literal
 
 import yaml
 
-# --------------------------------------------------------------------------- #
-# Paths
-# --------------------------------------------------------------------------- #
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 CONFIG_DIR = PROJECT_ROOT / "config"
 DATA_DIR = PROJECT_ROOT / "data"
@@ -31,28 +22,22 @@ NHANES_FILES_YAML = CONFIG_DIR / "nhanes_files.yaml"
 THRESHOLDS_YAML = CONFIG_DIR / "clinical_thresholds.yaml"
 
 
-# --------------------------------------------------------------------------- #
-# Cycle description
-# --------------------------------------------------------------------------- #
 @dataclass(frozen=True)
 class Cycle:
-    name: str          # "2013-2014"
-    dir: str           # CDC directory segment
+    name: str  # "2013-2014"
+    dir: str  # directory name on the CDC site
     kind: Literal["suffix", "prefix"]
-    token: str         # "_H" | "_I" | "P_"
+    token: str  # "_H", "_I" or "P_"
 
     def filename(self, base: str) -> str:
-        """Build the .XPT filename for a component base name in this cycle."""
+        """File name for a component in this cycle, e.g. DEMO_H.XPT."""
         if self.kind == "suffix":
             return f"{base}{self.token}.XPT"
         return f"{self.token}{base}.XPT"
 
 
-# --------------------------------------------------------------------------- #
-# Canonical variable map: raw NHANES code -> readable canonical name.
-# Blood-pressure and survey-weight variables are handled separately because
-# their raw names differ across cycles (see loaders).
-# --------------------------------------------------------------------------- #
+# NHANES variable codes and the names used in this project. The survey weight is
+# handled separately because its name changes between cycles.
 CANONICAL_VARS: dict[str, str] = {
     # demographics
     "RIDAGEYR": "age",
@@ -69,7 +54,7 @@ CANONICAL_VARS: dict[str, str] = {
     "LBDHDD": "hdl_mgdl",
     "LBDLDL": "ldl_mgdl",
     "LBXTR":  "triglycerides_mgdl",
-    # complete blood count (CBC file)
+    # complete blood count (CBC)
     "LBXHGB":   "hemoglobin",
     "LBXHCT":   "hematocrit",
     "LBXRBCSI": "rbc",
@@ -79,7 +64,7 @@ CANONICAL_VARS: dict[str, str] = {
     "LBXMCHSI": "mch",
     "LBXMC":    "mchc",
     "LBXRDW":   "rdw",
-    # standard biochemistry profile (BIOPRO file) — liver / kidney / electrolytes
+    # biochemistry profile (BIOPRO): liver, kidney, electrolytes
     "LBXSATSI": "alt",
     "LBXSASSI": "ast",
     "LBXSAPSI": "alp",
@@ -91,33 +76,28 @@ CANONICAL_VARS: dict[str, str] = {
     "LBXSKSI":  "potassium",
     "LBXSCLSI": "chloride",
     "LBXSCA":   "calcium",
-    # vitamin D (VID file) — absent in the 2017-2020 pre-pandemic release
+    # vitamin D (VID), not in the 2017-2020 release
     "LBXVIDMS": "vitamin_d",
-    # diabetes questionnaire (label-only)
+    # diabetes questionnaire (label only)
     "DIQ010": "diq_diabetes",
     "DIQ050": "diq_insulin",
     "DIQ070": "diq_pills",
-    # bp / cholesterol questionnaire (label-only)
+    # blood pressure / cholesterol questionnaire (label only)
     "BPQ080":  "bpq_high_chol",
     "BPQ090D": "bpq_chol_med",
     "BPQ020":  "bpq_high_bp",
     "BPQ040A": "bpq_bp_med",
-    # medical conditions (label-only)
+    # medical conditions (label only)
     "MCQ160C": "mcq_chd",
     "MCQ160E": "mcq_mi",
     "MCQ160F": "mcq_stroke",
     "MCQ160B": "mcq_chf",
 }
 
-# Survey weight variable differs by cycle: WTMEC2YR (H/I) vs WTMECPRP (P_).
+# Survey weight: WTMEC2YR in the 2-year cycles, WTMECPRP in the P_ release.
 WEIGHT_VARS = ("WTMEC2YR", "WTMECPRP")
 
-# --------------------------------------------------------------------------- #
-# Column role definitions — the leakage-control contract.
-# --------------------------------------------------------------------------- #
-# =========================================================================== #
-# Biomarker panels (blood-report analytes), grouped by clinical panel.
-# =========================================================================== #
+# Biomarkers by panel.
 CARDIOMETABOLIC = [
     "hba1c_pct", "fasting_glucose_mgdl",
     "total_chol_mgdl", "ldl_mgdl", "hdl_mgdl", "triglycerides_mgdl",
@@ -125,58 +105,49 @@ CARDIOMETABOLIC = [
 CBC_ANAEMIA = ["hemoglobin", "hematocrit", "rbc", "mcv", "mch", "mchc", "rdw"]
 LIVER = ["alt", "ast", "alp", "albumin", "total_bilirubin"]
 KIDNEY = ["creatinine", "bun"]
-VITAMINS = ["vitamin_d"]   # optional: absent for the 2017-2020 cycle
+VITAMINS = ["vitamin_d"]  # missing for the 2017-2020 cycle
 
-# Flag-only blood analytes: reported & escalated by the rule engine, but NEVER
-# used to generate lifestyle advice, and EXCLUDED from the model (medical, not
-# lifestyle-driven). They do not feed the RF label or features.
+# Reported and escalated by the rule engine, but never used for lifestyle advice
+# and left out of the model, since they aren't really lifestyle-driven.
 FLAG_ONLY_BIOMARKERS = ["wbc", "platelets", "sodium", "potassium", "chloride", "calcium"]
 
-# NOTE: BP / BMI / waist are intentionally OUT OF SCOPE — this is a blood-test-
-# report system. Non-blood measurements are not ingested, labelled, or modelled;
-# weight & blood pressure are signposted to the GP instead.
+# Blood pressure, BMI and waist aren't blood tests, so they aren't used at all.
 
-# --- Roles ---------------------------------------------------------------- #
-# Actionable BLOOD analytes: drive the multi-system severity label & recommendations.
+# These drive the severity label and the recommendations.
 ACTIONABLE_BLOOD = CARDIOMETABOLIC + CBC_ANAEMIA + LIVER + KIDNEY + VITAMINS
 
-# Mandatory (drop-if-missing): the full-sample analytes that anchor the label.
+# Rows missing any of these are dropped, since the label depends on them.
 MANDATORY_BIOMARKERS = ["hba1c_pct", "total_chol_mgdl", "hdl_mgdl"]
 
-# RF FEATURES = actionable blood analytes, minus vitamin_d (structurally missing
-# for a whole cycle). Flag-only markers are excluded.
+# Model features: the actionable markers minus vitamin D, which is missing for a
+# whole cycle.
 FEATURE_BIOMARKERS = [b for b in ACTIONABLE_BLOOD if b != "vitamin_d"]
 
-# Imputed (non-mandatory feature columns). vitamin_d & flag-only are NOT imputed.
+# Feature columns that get imputed.
 SUPPLEMENTARY_BIOMARKERS = [b for b in FEATURE_BIOMARKERS if b not in MANDATORY_BIOMARKERS]
 
-# Everything carried through cleaning/winsorising/plausibility (for reporting too).
+# Everything that goes through cleaning, plausibility checks and winsorising.
 ALL_BIOMARKERS = ACTIONABLE_BLOOD + FLAG_ONLY_BIOMARKERS
 
-# Demographic features fed to the model.
+# Demographic columns kept through data preparation.
 DEMOGRAPHIC_FEATURES = ["age", "sex_code", "eth_code", "educ_code", "pir"]
 
-# LABEL-ONLY columns: used to build the target, NEVER used as RF features.
+# Only used to build the label, never as model features.
 LABEL_ONLY_COLUMNS = [
     "diq_diabetes", "diq_insulin", "diq_pills",
     "bpq_high_chol", "bpq_chol_med", "bpq_high_bp", "bpq_bp_med",
     "mcq_chd", "mcq_mi", "mcq_stroke", "mcq_chf",
-    "statin_or_metformin",   # engineered flag from RXQ_RX
+    "statin_or_metformin",  # derived from RXQ_RX
 ]
 
-# Survey-design columns kept for provenance but excluded from features.
+# Survey design columns, kept for reference but not used as features.
 DESIGN_COLUMNS = ["psu", "strata", "wtmec", "cycle"]
 
-# Adult-only cohort: NHANES surveys all ages, but this system is an adult
-# cardiometabolic recommender. Paediatric records use percentile-based reference
-# ranges (not the adult thresholds here) and lack the adult diagnosis/medication
-# questionnaires, so they are excluded before labelling.
+# Adults only. Children's results use age-based reference ranges, and children
+# don't have the adult diagnosis and medication questionnaires.
 ADULT_MIN_AGE = 18
 
 
-# --------------------------------------------------------------------------- #
-# Loaders
-# --------------------------------------------------------------------------- #
 def load_yaml(path: Path) -> dict:
     with open(path, "r", encoding="utf-8") as fh:
         return yaml.safe_load(fh)

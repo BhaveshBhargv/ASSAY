@@ -1,16 +1,7 @@
-"""
-rule_engine.py — the configurable clinical rule engine (domain service).
+"""Classifies biomarker readings against the configured rule set.
 
-Responsibility (single): given biomarker values + patient context, classify each
-biomarker against the configured bands and return a standardized result. It holds
-NO clinical constants itself — all thresholds/interpretations come from the
-injected RuleSet (Dependency Inversion). New biomarkers are added in YAML only.
-
-Public API:
-    engine = RuleEngine(load_ruleset())
-    engine.classify(code, value, context) -> BiomarkerResult | None
-    engine.evaluate({code: value, ...}, context) -> RuleEngineResult
-    engine.layer1_severity(code, value, sex) -> Severity   # used by Phase-2 labelling
+All thresholds and interpretation text come from the RuleSet, so new
+biomarkers only need adding to the YAML file.
 """
 from __future__ import annotations
 
@@ -40,7 +31,6 @@ class RuleEngine:
 
     @property
     def actionable_codes(self) -> list[str]:
-        """Codes whose abnormalities drive the label & lifestyle recommendations."""
         return [c for c, r in self._ruleset.rules.items() if r.tier == "actionable"]
 
     @property
@@ -57,7 +47,6 @@ class RuleEngine:
     def secondary_borderline_min(self) -> int:
         return self._ruleset.secondary_borderline_min
 
-    # ------------------------------------------------------------------ #
     def _band_for(self, code: str, value: float, sex: Optional[str]):
         rule = self._ruleset.get(code)
         if rule is None:
@@ -65,12 +54,12 @@ class RuleEngine:
         for band in rule.bands:
             if band.contains(value, sex):
                 return rule, band
-        return rule, None  # value fell outside all bands (should not happen)
+        return rule, None  # shouldn't happen, the bands cover every value
 
     def classify(
         self, code: str, value: Optional[float], context: PatientContext
     ) -> Optional[BiomarkerResult]:
-        """Classify one biomarker. Returns None for unknown codes or missing values."""
+        """Classify one reading. Returns None for unknown codes or missing values."""
         if value is None or (isinstance(value, float) and math.isnan(value)):
             return None
         rule, band = self._band_for(code, float(value), context.sex)
@@ -100,7 +89,6 @@ class RuleEngine:
     def evaluate(
         self, readings: dict[str, Optional[float]], context: PatientContext
     ) -> RuleEngineResult:
-        """Classify a full panel of readings into a standardized result."""
         result = RuleEngineResult(
             ruleset_version=self.ruleset_version,
             context=context,
@@ -115,10 +103,9 @@ class RuleEngine:
                 result.biomarkers.append(res)
         return result
 
-    # ------------------------------------------------------------------ #
-    # Used by Phase-2 Layer-1 labelling so rules and training labels share
-    # exactly one clinical definition.
     def layer1_severity(self, code: str, value: Optional[float], sex: Optional[str]) -> Severity:
+        """Severity of one reading. Used when building the training labels, so the
+        labels and the live rule engine use exactly the same thresholds."""
         if value is None or (isinstance(value, float) and math.isnan(value)):
             return Severity.NORMAL
         _, band = self._band_for(code, float(value), sex)
@@ -126,6 +113,6 @@ class RuleEngine:
 
 
 def _fmt(value: float) -> str:
-    """Render a value without trailing .0 for integers."""
+    """Format a number without a trailing .0."""
     f = float(value)
     return str(int(f)) if f.is_integer() else f"{f:g}"

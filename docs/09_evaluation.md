@@ -1,16 +1,16 @@
-# Phase 9 — System Evaluation & Explainability
+# Phase 9: Evaluation and explainability
 
-**Author:** Bhavesh Bhargava — MSc Advanced Data Science
-**Status:** Implemented (`src/app/eval/`), run end-to-end; artefacts in `reports/phase9/`.
-**Run:** `python scripts/evaluate_system.py` (`--no-llm` to skip the LLM step).
+**Author:** Bhavesh Bhargava, MSc Advanced Data Science
+**Code:** `src/app/eval/`, with results in `reports/phase9/`
+**Run:** `python scripts/evaluate_system.py` (`--no-llm` skips the LLM step)
 
-> Evaluates all four moving parts of the pipeline — the Random Forest, its
-> explainability, the RAG retriever, and the LLM recommendations — with one script
-> that writes a consolidated JSON summary and publication-ready plots.
+One script evaluates the Random Forest, its explanations, the guideline
+retrieval and the LLM recommendations, and writes a JSON summary
+(`evaluation_summary.json`) and plots.
 
 ---
 
-## 1. Machine learning (held-out test set, n = 3,862)
+## 1. Random Forest (test set, n = 3,862)
 
 | Metric | Value |
 |---|---|
@@ -18,24 +18,66 @@
 | Precision (macro) | **0.859** |
 | Recall (macro) | **0.886** |
 | F1 (macro) | **0.867** |
-| ROC-AUC (macro, OVR) | **0.973** |
+| ROC-AUC (macro, one-vs-rest) | **0.973** |
 
-Per-class precision/recall/F1 and the confusion matrix are in
-`reports/phase9/metrics.json`; plots: `ml_headline_metrics.png`,
-`confusion_matrix.png`, `roc_curves.png`. Safety-critical error (true *serious* →
-predicted *normal*) is **5 / 1,311 (0.4%)**. The **Layer-2 novelty slice** (the
-study's core question) is reported too: hidden-risk detection **72.2%**.
+Per-class results and the confusion matrix are in `reports/phase9/metrics.json`,
+with plots in `ml_headline_metrics.png`, `confusion_matrix.png` and
+`roc_curves.png`. Only **5 of 1,311 (0.4%)** serious cases were predicted normal.
+
+### Agreement with the rule engine
+
+The model agrees with the rule engine on **93.5%** of test records, and **97.4%**
+of its serious predictions were already serious by the rules (it calls only 29
+records serious that the rules don't). The headline numbers above mostly measure
+how well it has learned the rules. Phase 4 §4 goes into this.
+
+### Novelty slice
+
+On the 306 records where the diagnosis or medication answers raised the label,
+the model's exact accuracy is **18.6%** (95% CI 14.7–23.4%). Predicting
+"serious" for all of them scores **58.5%**, and the model is significantly worse
+(exact McNemar p = 2.4 × 10⁻¹⁷). Splitting by medication doesn't change the
+picture. The full breakdown is in Phase 4 §5, and the comparison is plotted in
+`novelty_baselines.png`.
+
+The "risk detected" rate of 72.2% in `metrics.json` shouldn't be used as a
+result: the slice has no normal records, so any constant non-normal prediction
+scores 100% on it.
+
+### Does fusing the model with the rules help?
+
+The app uses `max(rules, model)`, so the model can only raise the severity. On
+the test set:
+
+| Configuration | Accuracy (95% CI) |
+|---|---|
+| Rule engine only | **92.1%** (91.2–92.9) |
+| Random Forest only | 88.9% (87.8–89.8) |
+| Fused, `max(rules, model)` | 91.8% (90.9–92.7) |
+
+The model raised the severity for 135 records:
+- **69 were in the novelty slice**, where raising it was right. 57 of those
+  reached the true label and 12 were still too low.
+- **66 were false escalations** outside the slice (47 normal → borderline, 19
+  borderline → serious). That's a false escalation rate of **1.9%** (1.5–2.4%)
+  of the 3,556 other records.
+
+Compared with the rules alone, fusion fixes 57 records and breaks 66, a net
+change of −9 (exact McNemar p = 0.47). So adding the model doesn't significantly
+improve the result, and false escalations are the only harm this design can
+cause.
 
 ### Explainability
-- **SHAP (TreeExplainer) + Gini importance** agree on the drivers. Top features:
-  `hba1c_pct, total_chol_mgdl, fasting_glucose_mgdl, age, hdl_mgdl, tg_hdl_ratio,
-  tc_hdl_ratio, age_band` — all cardiometabolic markers, age, and the engineered
-  ratios (confirming interaction signal is used).
-- Artefacts: `feature_importance.{png,csv}`, `shap_summary_{normal,borderline,serious}.png`.
+
+- **SHAP (TreeExplainer) and Gini importance** agree on the most important
+  features: `hba1c_pct, total_chol_mgdl, fasting_glucose_mgdl, age, hdl_mgdl,
+  tg_hdl_ratio, tc_hdl_ratio, age_band`. These are the cardiometabolic markers,
+  age, and the ratio features built from them.
+- Outputs: `feature_importance.{png,csv}`, `shap_summary_{normal,borderline,serious}.png`.
 
 ---
 
-## 2. RAG retrieval (7 gold queries)
+## 2. Guideline retrieval (7 test queries)
 
 | K | Precision@K | Recall@K |
 |---|---|---|
@@ -43,82 +85,95 @@ study's core question) is reported too: hidden-risk detection **72.2%**.
 | 3 | **0.667** | 0.44 |
 | 5 | 0.543 | 0.57 |
 
-**Context relevance:** mean top-K cosine **0.52**; tag-overlap **0.49**.
+**Context relevance:** mean top-K cosine similarity **0.52**, tag overlap **0.54**.
 Plot: `rag_precision_recall_at_k.png`.
 
-**Relevance judgement (silver standard):** a passage is relevant to a query if its
-biomarker tags intersect the query's target biomarkers — reproducible, no manual
-annotation (a documented limitation vs. human relevance labels).
+**How relevance is judged:** a passage counts as relevant if its biomarker tags
+include one of the query's target biomarkers. This is reproducible and needs no
+manual labelling, but it's only an approximation of human relevance judgements.
 
-**Precision@1 = 0.86** means the single best passage is almost always on-topic;
-precision falls with K (the small corpus has only a handful of passages per
-condition, so beyond K≈3 there aren't more relevant ones to find), while recall
-rises as expected.
+A **Precision@1 of 0.86** means the top passage is almost always on topic.
+Precision falls as K grows because the corpus only has a few passages for each
+condition, so after about three there aren't many more relevant ones to find.
+Recall goes up with K, as expected.
 
-### A weakness the evaluation caught (and a fix)
-Per-query, cardiometabolic queries scored perfectly (P@3 = 1.0) but **fatty-liver
-retrieval scored 0.0**. Root cause: `build_query` hard-coded the phrase
-*"cardiometabolic risk"* into **every** query, biasing the embedding toward
-metabolic passages. Removing it (leading with the flagged markers instead) raised
-fatty-liver P@3 0.00 → 0.33 and aggregate P@3 0.62 → 0.67, R@5 0.48 → 0.57.
-Liver/anaemia remain harder (fewer, more general passages) — an honest limit of a
-small curated corpus, addressable by expanding it.
+### A problem the evaluation found
+
+Looking at individual queries, the cardiometabolic ones scored perfectly (P@3 =
+1.0) but **fatty liver scored 0.0**. `build_query` had the phrase
+"cardiometabolic risk" written into every query, which pulled the embeddings
+towards metabolic passages. Removing it and starting the query with the flagged
+markers raised fatty liver P@3 from 0.00 to 0.33, overall P@3 from 0.62 to 0.67,
+and R@5 from 0.48 to 0.57. Liver and anaemia queries are still harder, since
+there are fewer and more general passages for them. A larger corpus would help.
 
 ---
 
 ## 3. LLM recommendations
 
-Metrics, all over the generated advice items:
+These metrics are calculated over every advice item generated:
 
 | Metric | Definition |
 |---|---|
-| **Groundedness** | share of advice items that cite a real retrieved passage |
-| **Faithfulness** | share whose text is *entailed* by its cited evidence — judged by embedding cosine ≥ τ (0.35); deterministic, no LLM judge required |
-| **Hallucination rate** | share that are ungrounded **or** unfaithful (`1 − faithful share`) |
+| **Groundedness** | share of advice items citing a passage that was actually retrieved |
+| **Faithfulness** | share whose text matches its cited evidence, measured as embedding cosine similarity ≥ τ (0.35). Deterministic, with no LLM acting as judge |
+| **Hallucination rate** | share that are uncited **or** unfaithful (`1 − faithful share`) |
 
-`score_recommendation` / `aggregate` are pure functions, **unit-tested offline**
-with a controlled fake embedder (`tests/test_eval.py`): a grounded+matching item
-scores faithful, an item citing a non-existent passage counts as hallucination,
-and a grounded-but-unrelated item is caught as unfaithful. So the metric *logic*
-is verified.
+`score_recommendation` and `aggregate` are plain functions **tested offline**
+with a fake embedder (`tests/test_eval.py`). A cited item that matches its
+evidence counts as faithful, an item citing a passage that doesn't exist counts
+as a hallucination, and a cited item that doesn't match its evidence counts as
+unfaithful.
 
-Producing the *numbers* requires generating recommendations, which needs a
-reachable LLM (local Ollama by default). Without one, the script reports the step
-as skipped rather than failing:
+**Results:**
+
+| | |
+|---|---|
+| Provider | OpenRouter, `nex-agi/nex-n2.5-pro:free` |
+| Sample | 5 evaluation patients, 38 advice items |
+| Groundedness | 1.00 |
+| Faithfulness | 1.00 (mean cosine 0.69) |
+| Hallucination rate | 0.00 |
+
+Plot: `llm_quality.png`.
+
+These numbers need to be read with care. Items are scored **after** the Phase 6
+checks have run (`run_llm_eval` calls `verify` first), so uncited items have
+already been removed and groundedness is 1.0 by design. The faithfulness
+threshold of 0.35 is fairly lenient, and the sample is small: five reports from
+one free model.
+
+To run it again you need an LLM. Without one, the script reports the step as
+skipped instead of failing:
 
 ```
 python scripts/evaluate_system.py                 # with Ollama running
-python scripts/evaluate_system.py --provider anthropic
+python scripts/evaluate_system.py --provider openrouter
 ```
-
-Groundedness is additionally enforced *at generation time* by the Phase-6 guards
-(ungrounded/diagnostic items are stripped), so the deployed system's groundedness
-is high by construction; this evaluation measures faithfulness beyond mere
-citation presence.
 
 ---
 
-## 4. Module map (`src/app/eval/`)
+## 4. Modules (`src/app/eval/`)
 
-| File | Responsibility |
+| File | What it does |
 |---|---|
-| `config.py` | Test patients, RAG gold queries, thresholds, `reports/phase9` path |
-| `ml_eval.py` | Reuses Phase-4 `evaluate` + `explain`; adds the headline-metrics chart |
-| `rag_eval.py` | Precision@K / Recall@K / context relevance + plot |
-| `llm_eval.py` | Groundedness / faithfulness / hallucination (+ pipeline driver) |
-| `scripts/evaluate_system.py` | Orchestrator → `evaluation_summary.json` + plots |
-| `tests/test_eval.py` | Offline tests for the LLM metric logic + RAG eval |
+| `config.py` | Evaluation patients, retrieval test queries, thresholds, the `reports/phase9` path |
+| `ml_eval.py` | Reuses Phase 4's `evaluate` and `explain`, and adds the headline metrics chart |
+| `rag_eval.py` | Precision@K, Recall@K, context relevance and the plot |
+| `llm_eval.py` | Groundedness, faithfulness and hallucination rate, and runs the pipeline to produce reports |
+| `scripts/evaluate_system.py` | Runs everything and writes `evaluation_summary.json` and the plots |
+| `tests/test_eval.py` | Offline tests for the LLM metrics and the retrieval evaluation |
 
 ---
 
 ## 5. Limitations
-1. **RAG relevance is a corpus-tag silver standard**, not human-annotated.
-2. **Faithfulness is an embedding-cosine proxy** for entailment (fast, deterministic);
-   an LLM-judge variant could be added for a second opinion.
-3. **LLM numbers need a live model** — the framework and logic are complete and tested;
-   the metrics populate when run against Ollama/Anthropic.
-4. **ML headline metrics reflect label–feature coupling** (see Phase 4 §4); the
-   novelty slice remains the fair test of genuine ML contribution.
 
-**Phase 9 exit criteria met** — ML, explainability, RAG, and LLM evaluation are
-implemented, visualised, and (where offline-possible) verified.
+1. **Retrieval relevance comes from the corpus tags**, not from human judgements.
+2. **Faithfulness uses embedding similarity** as a stand-in for real entailment.
+   It's fast and deterministic, but an LLM judge could be added as a second
+   opinion.
+3. **The LLM results come from a small sample** (5 reports, one model) and are
+   scored after the checks have removed uncited items.
+4. **The model's headline metrics mostly reflect agreement with the rule engine.**
+   On the novelty slice it's worse than a constant prediction, and fusing it with
+   the rules doesn't significantly change accuracy.

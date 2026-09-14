@@ -1,11 +1,9 @@
-"""
-train_model.py — Phase 4 entrypoint: train -> evaluate -> explain.
+"""Train, evaluate and explain the Random Forest.
 
-Usage:
+Needs the processed dataset in data/processed/ (see run_data_prep.py).
+
     python scripts/train_model.py
-    python scripts/train_model.py --quick     # tiny grid for a fast smoke run
-
-Requires the Phase-2 processed dataset in data/processed/.
+    python scripts/train_model.py --quick     # small grid for a quick run
 """
 from __future__ import annotations
 
@@ -18,10 +16,10 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from app.ml.data import load_dataset            # noqa: E402
-from app.ml.evaluate import evaluate            # noqa: E402
-from app.ml.explain import explain              # noqa: E402
-from app.ml.train import train                  # noqa: E402
+from app.ml.data import load_dataset  # noqa: E402
+from app.ml.evaluate import evaluate  # noqa: E402
+from app.ml.explain import explain  # noqa: E402
+from app.ml.train import train  # noqa: E402
 
 _QUICK_GRID = {"n_estimators": [200], "max_depth": [None], "min_samples_leaf": [5]}
 
@@ -49,8 +47,17 @@ def main() -> None:
     print("per-class F1:", {k: round(v["f1"], 3) for k, v in metrics["per_class"].items()})
     ns = metrics["novelty_slice"]
     if ns.get("n"):
-        print(f"\nNOVELTY SLICE (n={ns['n']}): hidden-risk detection = "
-              f"{ns['risk_detected_rate']*100:.1f}% | exact acc = {ns['exact_label_accuracy']*100:.1f}%")
+        m, v = ns["model"], ns["vs_best_constant"]
+        ci = m["exact_accuracy_ci95"]
+        print(f"\nNOVELTY SLICE (n={ns['n']}) — true labels {ns['true_class_distribution']}")
+        print(f"  model exact accuracy : {m['exact_accuracy']:.3f} [{ci[0]:.3f}, {ci[1]:.3f}]")
+        for name, b in ns["baselines"].items():
+            bci = b["exact_accuracy_ci95"]
+            print(f"  {name:<22}: {b['exact_accuracy']:.3f} [{bci[0]:.3f}, {bci[1]:.3f}]")
+        print(f"  vs {v['baseline']}: McNemar p={v['mcnemar_exact_p']:.3g} "
+              f"(model wins {v['model_correct_baseline_wrong']}, "
+              f"loses {v['model_wrong_baseline_correct']}) -> "
+              f"{'model better' if v['model_beats_baseline'] else 'MODEL DOES NOT BEAT BASELINE'}")
     print("\ntop features:", ", ".join(imp["feature"].head(8)))
     print(f"\nmodel -> {result.model_path}")
     print(f"reports -> {ROOT / 'reports' / 'phase4'}")

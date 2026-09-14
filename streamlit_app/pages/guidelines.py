@@ -1,9 +1,7 @@
-"""
-pages/guidelines.py — full list of retrieved guideline passages.
+"""Lists every guideline passage retrieved for the current assessment.
 
-A dedicated page (reachable from the dashboard's "View all retrieved guidelines"
-link) that renders every NICE/NHS/WHO passage retrieved for the current
-assessment. Reads the assessment from session state, so run an analysis first.
+Linked from the dashboard. It reads the assessment from session state, so an
+analysis has to be run first.
 """
 from __future__ import annotations
 
@@ -19,7 +17,7 @@ import streamlit as st  # noqa: E402
 st.set_page_config(page_title="Assay — Guidelines", page_icon="📖", layout="wide")
 
 from ui import components as C  # noqa: E402
-from ui.theme import inject     # noqa: E402
+from ui.theme import inject  # noqa: E402
 
 inject()
 

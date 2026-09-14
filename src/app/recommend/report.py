@@ -1,17 +1,7 @@
-"""
-report.py — the structured recommendation schema (LLM output contract).
+"""The JSON structure the LLM has to return.
 
-Every piece of advice is an `AdviceItem` that MUST carry a `rationale` (the
-"why") and at least one `evidence` citation id (e.g. "E1") pointing at a
-retrieved guideline passage. This structure is what makes the four hard rules
-enforceable downstream:
-
-    • Only retrieved evidence  -> evidence ids are validated against the pack
-    • Always explain why       -> rationale is a required, non-empty field
-    • Never diagnose           -> no diagnosis field exists; a guard scans text
-    • Avoid hallucination      -> structured parse + citation + groundedness check
-
-The nine advice sections are exactly the ones requested in the Phase-6 spec.
+Each piece of advice needs a rationale and at least one evidence id such as
+"E1". That's what lets the guards check the report once it comes back.
 """
 from __future__ import annotations
 
@@ -20,7 +10,7 @@ from typing import List
 
 from pydantic import BaseModel, Field
 
-# The nine lifestyle advice sections (order preserved for rendering).
+# Advice sections, in display order.
 ADVICE_SECTIONS: tuple[str, ...] = (
     "lifestyle",
     "diet",
@@ -75,7 +65,6 @@ class RecommendationReport(BaseModel):
         return getattr(self, name)
 
     def all_items(self) -> list[tuple[str, AdviceItem]]:
-        """Every (section, item) pair — used by the groundedness verifier."""
         pairs: list[tuple[str, AdviceItem]] = []
         for sec in ADVICE_SECTIONS:
             for item in self.section(sec):
@@ -83,10 +72,8 @@ class RecommendationReport(BaseModel):
         return pairs
 
 
-# --- schema helpers -------------------------------------------------------- #
-
 def example_json() -> str:
-    """A compact, valid example that anchors the model's JSON output shape."""
+    """A short valid example, shown in the prompt so the model knows the expected shape."""
     example = {
         "explanation": "Your HbA1c is in the higher range and your HDL ('good') "
                        "cholesterol is low, a combination linked to raised "
@@ -124,7 +111,7 @@ def example_json() -> str:
 
 
 def format_instructions() -> str:
-    """Plain-text JSON contract for the prompt (provider-agnostic; no framework)."""
+    """The JSON format instructions included in the prompt."""
     sections = ", ".join(ADVICE_SECTIONS)
     return (
         "Respond with a SINGLE valid JSON object and nothing else — no prose, no "

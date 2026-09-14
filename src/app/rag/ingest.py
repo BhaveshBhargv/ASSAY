@@ -1,8 +1,6 @@
-"""
-ingest.py — build the FAISS index from the guideline corpus (offline, build-time).
+"""Build the FAISS index from the guideline corpus.
 
-Pipeline:  load (curated YAML + PDFs) -> embed -> FAISS index -> persist.
-Run via scripts/build_rag_index.py.
+Run it through scripts/build_rag_index.py.
 """
 from __future__ import annotations
 

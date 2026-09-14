@@ -1,14 +1,9 @@
-"""
-missing.py — hybrid missing-value strategy (approved).
+"""Missing values: drop rows without the label-defining markers, impute the rest.
 
-Rule 1 (integrity): drop any row missing a MANDATORY (label-defining) biomarker.
-        We never fabricate the ground truth the model learns.
-Rule 2 (retention): median-impute SUPPLEMENTARY biomarkers and soft demographic
-        predictors (education, income ratio, height). Imputers are FIT ON TRAIN
-        ONLY and applied to test — no leakage.
-
-Note: labels are built (labeling.py) BEFORE supplementary imputation, so Layer-1
-severity is only ever driven by genuinely observed values.
+Rows missing a mandatory biomarker are dropped, since the label can't be built
+without it. Supplementary biomarkers and a couple of demographic columns are
+imputed, with the imputer fitted on the training set only. Labels are built
+before this step, so they only ever use real measurements.
 """
 from __future__ import annotations
 
@@ -21,12 +16,12 @@ from .config import MANDATORY_BIOMARKERS, SUPPLEMENTARY_BIOMARKERS
 
 log = logging.getLogger(__name__)
 
-# Soft predictors that may be missing and are safe to impute.
+# Demographic columns that are fine to impute.
 _SOFT_PREDICTORS = ["pir", "educ_code"]
 
 
 def drop_missing_mandatory(df: pd.DataFrame) -> pd.DataFrame:
-    """Complete-case on the mandatory biomarkers only."""
+    """Drop rows missing any mandatory biomarker."""
     present = [c for c in MANDATORY_BIOMARKERS if c in df.columns]
     before = len(df)
     out = df.dropna(subset=present).reset_index(drop=True)
@@ -36,10 +31,7 @@ def drop_missing_mandatory(df: pd.DataFrame) -> pd.DataFrame:
 
 
 def fit_imputer(train: pd.DataFrame, strategy: str = "median", knn_neighbors: int = 5):
-    """
-    Fit an imputer on the supplementary + soft-predictor columns using TRAIN only.
-    Returns (imputer, columns).
-    """
+    """Fit an imputer on the training set. Returns (imputer, columns)."""
     cols = [c for c in (SUPPLEMENTARY_BIOMARKERS + _SOFT_PREDICTORS) if c in train.columns]
     if strategy == "knn":
         imputer = KNNImputer(n_neighbors=knn_neighbors)

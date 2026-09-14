@@ -1,9 +1,7 @@
-"""
-components.py — presentational HTML fragments for the dashboard.
+"""HTML snippets for the dashboard.
 
-Each function returns an HTML string (rendered by the caller via
-st.markdown(..., unsafe_allow_html=True)). No Streamlit calls here, so the visual
-layer stays pure and easy to reason about. Colours come from theme.py.
+Each function returns a string for st.markdown(..., unsafe_allow_html=True).
+Colours come from theme.py.
 """
 from __future__ import annotations
 
@@ -50,8 +48,6 @@ def chip(status: str) -> str:
             f'</span>{_esc(status)}</span>')
 
 
-# --- hero ------------------------------------------------------------------ #
-
 def hero(fused) -> str:
     sev = fused.severity
     color = SEVERITY.get(sev, SEVERITY["normal"])
@@ -83,8 +79,6 @@ def hero(fused) -> str:
     </div>"""
 
 
-# --- stat tiles ------------------------------------------------------------ #
-
 def stat_tiles(fused, rule_result, audit=None) -> str:
     n_flagged = len(fused.flagged)
     n_signpost = len(fused.signpost)
@@ -108,14 +102,12 @@ def stat_tiles(fused, rule_result, audit=None) -> str:
     return f'<div class="tiles">{cells}</div>'
 
 
-# --- model drivers (per-patient SHAP) -------------------------------------- #
-
 def rf_drivers(fused) -> str:
-    """Which biomarkers the RF weighed most in reaching its read (per-patient SHAP).
+    """The markers that drove the model's read, from per-patient SHAP values.
 
-    Rendered only when the model returned drivers — i.e. it read a raised-risk
-    pattern. When it escalated past the rules, the copy makes the honest point that
-    each value can look normal alone; it's the combination that raised the risk."""
+    Empty unless the model returned drivers, which only happens for a raised-risk
+    prediction.
+    """
     drivers = getattr(fused, "rf_drivers", None) or []
     if not drivers:
         return ""
@@ -142,10 +134,8 @@ def rf_drivers(fused) -> str:
             f'<div class="section-note">{_esc(lede)}</div>{"".join(rows)}</div>')
 
 
-# --- severity table with range strips (signature) -------------------------- #
-
 def _strip(value: float, low, high, color: str) -> str:
-    """Compute a reference-range strip: reference band + patient marker."""
+    """A bar showing the reference range with the patient's value marked on it."""
     lo = low if isinstance(low, (int, float)) else None
     hi = high if isinstance(high, (int, float)) else None
     if lo is None and hi is None:
@@ -203,8 +193,6 @@ def severity_table(rule_result) -> str:
     return f'<div class="panel">{"".join(html_rows)}</div>'
 
 
-# --- evidence -------------------------------------------------------------- #
-
 def evidence_cards(evidence) -> str:
     if not evidence:
         return '<div class="panel">No guideline passages retrieved.</div>'
@@ -219,8 +207,6 @@ def evidence_cards(evidence) -> str:
         )
     return "".join(cards)
 
-
-# --- recommendations ------------------------------------------------------- #
 
 def recommendations(report) -> str:
     blocks = [f'<div class="panel"><div class="lede">{_esc(report.explanation)}</div></div>']

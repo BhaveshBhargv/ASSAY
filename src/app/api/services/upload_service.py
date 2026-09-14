@@ -1,4 +1,4 @@
-"""upload_service.py — the /upload use case: parse a report file for review."""
+"""Parses an uploaded report for /upload."""
 from __future__ import annotations
 
 import logging

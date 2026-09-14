@@ -1,21 +1,13 @@
-"""
-units.py — unit normalisation, conversion, and plausibility for biomarkers.
+"""Unit detection, conversion and plausibility checks for the report parser.
 
-Two jobs used by the report parser:
-  1. Decide whether a printed value's unit is acceptable for a given biomarker
-     (unit-anchoring stops "199 pg/ml" from being read as fasting glucose).
-  2. Convert a printed value in a report's unit to the app's canonical unit
-     (e.g. Vitamin D ng/mL → nmol/L ×2.5), and reject physiologically
-     impossible values.
-
-Canonical units match `config/clinical_rules.yaml`. Conversion factors multiply
-the printed value to reach the canonical unit.
+Canonical units match config/clinical_rules.yaml. Each conversion factor
+multiplies the printed value to give the canonical unit.
 """
 from __future__ import annotations
 
 import re
 
-# Canonical unit per biomarker (normalised token form).
+# Canonical unit for each biomarker.
 CANON_UNIT: dict[str, str] = {
     "hba1c_pct": "%", "fasting_glucose_mgdl": "mg/dl", "total_chol_mgdl": "mg/dl",
     "ldl_mgdl": "mg/dl", "hdl_mgdl": "mg/dl", "triglycerides_mgdl": "mg/dl",
@@ -27,7 +19,7 @@ CANON_UNIT: dict[str, str] = {
     "calcium": "mg/dl", "vitamin_d": "nmol/l",
 }
 
-# Accepted printed units → factor to the canonical unit (1.0 = already canonical).
+# Units a report may use for each biomarker, with the factor to the canonical unit.
 CONVERSIONS: dict[str, dict[str, float]] = {
     "hba1c_pct": {"%": 1.0},
     "fasting_glucose_mgdl": {"mg/dl": 1.0, "mmol/l": 18.016},
@@ -56,7 +48,7 @@ CONVERSIONS: dict[str, dict[str, float]] = {
     "vitamin_d": {"nmol/l": 1.0, "ng/ml": 2.496},
 }
 
-# Physiological plausibility bounds in CANONICAL units (reject garbage extractions).
+# Plausible range in canonical units. Anything outside is treated as a bad read.
 PLAUSIBILITY: dict[str, tuple[float, float]] = {
     "hba1c_pct": (3, 20), "fasting_glucose_mgdl": (30, 600), "total_chol_mgdl": (50, 500),
     "ldl_mgdl": (10, 400), "hdl_mgdl": (5, 150), "triglycerides_mgdl": (20, 2000),
@@ -68,8 +60,8 @@ PLAUSIBILITY: dict[str, tuple[float, float]] = {
     "calcium": (5, 15), "vitamin_d": (3, 250),
 }
 
-# Printed-unit spellings → normalised token. Longest keys checked first so, e.g.,
-# "10^3/ul" wins before "3", and "pg/ml" before "pg".
+# Unit spellings and their normalised form, longest first so that "pg/ml" is
+# tried before "pg".
 _UNIT_ALIASES: list[tuple[str, str]] = sorted([
     ("10^3/ul", "10^3/ul"), ("10³/ul", "10^3/ul"), ("x10^3/ul", "10^3/ul"),
     ("10^9/l", "10^3/ul"), ("k/ul", "10^3/ul"), ("thou/ul", "10^3/ul"), ("thous/ul", "10^3/ul"),
@@ -86,10 +78,9 @@ _UNIT_ALIASES: list[tuple[str, str]] = sorted([
 ], key=lambda t: -len(t[0]))
 
 
-# Abnormality markers labs print between the value and its unit ("10.7 L* g/dL",
-# "167.9 H mg/dL", "12.6 H* 10^3/µl"). They must be stripped before unit matching,
-# otherwise every FLAGGED result — precisely the clinically interesting ones — is
-# read as having no unit and silently dropped.
+# H/L flags that labs print between the value and the unit ("10.7 L* g/dL").
+# If these aren't stripped, flagged results (the abnormal ones) have no
+# recognisable unit and get dropped.
 _FLAG_TOKEN = re.compile(r"^\s*(?:\*+|[HL]\*?|HIGH|LOW|ABNORMAL|BORDERLINE)(?=\s)", re.I)
 
 
@@ -105,11 +96,11 @@ def _leading_unit(s: str) -> str:
 
 
 def detect_unit(rest: str) -> str:
-    """Normalised unit token that the text immediately after a value starts with.
+    """Normalised unit at the start of the text after a value, or "" if none.
 
-    If nothing matches, one leading abnormality flag is stripped and the match is
-    retried, so "10.7 L* g/dL" reads as g/dl. The flag is only stripped when a
-    space follows it, so genuine units ("l/l") are never mistaken for a flag.
+    If nothing matches, a leading H/L flag is removed and the match is tried
+    again. The flag has to be followed by a space, so a real unit such as "l/l"
+    is never mistaken for one.
     """
     unit = _leading_unit(_normalise(rest))
     if unit:
@@ -119,9 +110,12 @@ def detect_unit(rest: str) -> str:
 
 
 def to_canonical(code: str, value: float, unit: str):
-    """Return (canonical_value, converted_from) or (None, None) if the unit isn't
-    acceptable for this biomarker. `converted_from` is the source unit when a
-    non-trivial conversion was applied, else None."""
+    """Convert a value to the canonical unit for `code`.
+
+    Returns (value, converted_from), where converted_from is the original unit
+    if a conversion was applied and None otherwise. Returns (None, None) if the
+    unit isn't valid for this biomarker.
+    """
     table = CONVERSIONS.get(code)
     if table is None or unit not in table:
         return None, None

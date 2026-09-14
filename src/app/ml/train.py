@@ -1,14 +1,7 @@
-"""
-train.py — train the Random Forest with GridSearchCV + stratified CV.
+"""Train the Random Forest with a grid search over stratified CV folds.
 
-Design (approved):
-  * RandomForestClassifier(class_weight="balanced")  — handle class imbalance
-  * GridSearchCV over a focused grid, scoring = macro-F1
-  * StratifiedKFold(5) — preserves class proportions per fold
-  * unscaled features (trees are scale-invariant)
-
-The model is saved with joblib together with a metadata sidecar (best params,
-CV score, feature names, label order, data fingerprint) for reproducibility.
+The model is saved with joblib, alongside a JSON file recording the best
+parameters, CV score and feature names.
 """
 from __future__ import annotations
 
@@ -27,7 +20,7 @@ from .data import LABEL_ORDER, REGISTRY_DIR, Dataset
 
 log = logging.getLogger(__name__)
 
-# Focused, defensible grid (keeps GridSearch tractable: 2*3*3*2 = 36 configs).
+# 2 * 3 * 3 * 2 = 36 combinations.
 PARAM_GRID = {
     "n_estimators": [300, 500],
     "max_depth": [None, 12, 20],
@@ -79,7 +72,7 @@ def train(
              search.best_score_, search.best_params_)
 
     model_path = registry_dir / "rf_model.joblib"
-    joblib.dump(model, model_path, compress=3)  # keep the committed artefact small
+    joblib.dump(model, model_path, compress=3)  # compressed so it's small enough to commit
 
     metadata = {
         "model_type": "RandomForestClassifier",

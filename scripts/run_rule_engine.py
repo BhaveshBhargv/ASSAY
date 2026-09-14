@@ -1,12 +1,8 @@
-"""
-run_rule_engine.py — Phase 3 demo / CLI.
+"""Classify a sample blood panel and print the result as JSON.
 
-Classifies a sample blood panel and prints the standardized JSON output.
-
-Usage:
     python scripts/run_rule_engine.py
     python scripts/run_rule_engine.py --sex female --age 61 \
-        --set hba1c_pct=6.8 --set sbp_mmhg=182 --set hdl_mgdl=38
+        --set hba1c_pct=6.8 --set ldl_mgdl=182 --set hdl_mgdl=38
 """
 from __future__ import annotations
 
@@ -18,9 +14,9 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from app.domain.models import PatientContext            # noqa: E402
+from app.domain.models import PatientContext  # noqa: E402
 from app.domain.services.rule_engine import RuleEngine  # noqa: E402
-from app.rules.loader import load_ruleset               # noqa: E402
+from app.rules.loader import load_ruleset  # noqa: E402
 
 _SAMPLE = {
     "hba1c_pct": 6.8,

@@ -1,15 +1,11 @@
-"""
-llm_eval.py — recommendation quality (Phase 9).
+"""Quality metrics for the generated recommendations.
 
-Metrics over the generated recommendations:
-  Groundedness    — share of advice items that cite a real retrieved passage
-  Faithfulness    — share whose text is entailed by their cited evidence, judged
-                    by embedding cosine >= tau (deterministic; no LLM judge needed)
-  Hallucination   — share that are ungrounded OR unfaithful (1 - faithful share)
+groundedness   share of advice items that cite a retrieved passage
+faithfulness   share whose text is similar enough (embedding cosine) to a cited passage
+hallucination  share that are ungrounded or unfaithful
 
-`score_recommendation` / `aggregate` are pure functions (embedding-based) so the
-metric logic is unit-testable offline. `run_llm_eval` drives the full pipeline to
-generate the recommendations first (needs a reachable LLM provider).
+score_recommendation and aggregate don't call an LLM, so they can be tested
+offline. run_llm_eval generates the recommendations first and needs a provider.
 """
 from __future__ import annotations
 
@@ -26,7 +22,7 @@ log = logging.getLogger("assay.eval")
 
 
 def score_recommendation(report, evidence, embedder, tau: float = C.FAITHFULNESS_TAU) -> dict:
-    """Groundedness / faithfulness / hallucination for one generated report."""
+    """Groundedness, faithfulness and hallucination rate for one report."""
     ev_by_id = {e.id: e for e in evidence}
     items = report.all_items()
     if not items:
@@ -84,8 +80,11 @@ def aggregate(scores: list[dict]) -> dict:
 
 def run_llm_eval(provider_kind: str = "ollama", model: str | None = None,
                  patients: list[dict] | None = None, k: int = 6) -> dict:
-    """Generate recommendations for the test patients and score them. Returns a
-    status dict; on an unreachable LLM it reports the failure instead of raising."""
+    """Generate and score recommendations for the test patients.
+
+    If the LLM can't be reached, the failure is reported in the result rather
+    than raised.
+    """
     from app.domain.models import PatientContext
     from app.domain.services.rule_engine import RuleEngine
     from app.rag.embedder import DEFAULT_MODEL, SentenceTransformerEmbedder
@@ -122,7 +121,7 @@ def run_llm_eval(provider_kind: str = "ollama", model: str | None = None,
         system, user = build_messages(demo, fused, evidence)
         try:
             report = generate_report(provider, system, user)
-        except Exception as exc:  # noqa: BLE001 - no daemon / bad output
+        except Exception as exc:  # noqa: BLE001
             failures.append({"patient": p["name"], "error": str(exc)[:160]})
             continue
         cleaned, _audit = verify(report, evidence, provider=provider)

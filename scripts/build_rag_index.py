@@ -1,7 +1,5 @@
-"""
-build_rag_index.py — Phase 5 entrypoint: build the FAISS guideline index.
+"""Build the FAISS guideline index.
 
-Usage:
     python scripts/build_rag_index.py
     python scripts/build_rag_index.py --query "high cholesterol and low HDL"
 """
@@ -15,7 +13,7 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT / "src"))
 
-from app.rag.ingest import build_index          # noqa: E402
+from app.rag.ingest import build_index  # noqa: E402
 from app.rag.retriever import GuidelineRetriever  # noqa: E402
 
 

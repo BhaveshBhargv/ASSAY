@@ -1,7 +1,6 @@
-"""
-assessment_service.py — the /predict use case: rules + Random Forest + fusion.
+"""The assessment behind /predict: rules, Random Forest and fusion.
 
-Produces the fused assessment shared by /predict and /recommend.
+/recommend builds on the same assessment.
 """
 from __future__ import annotations
 

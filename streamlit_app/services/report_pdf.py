@@ -1,15 +1,12 @@
-"""
-report_pdf.py — render a downloadable PDF of the assessment + recommendations.
+"""PDF export of the assessment and recommendations.
 
-Uses fpdf2 with core fonts (no bundled font files). Text is sanitised to the
-latin-1 range core fonts support. Works with or without the LLM recommendations,
-so a rules-only assessment is still exportable.
+Uses fpdf2's built-in fonts, which only cover latin-1, so text is cleaned up
+first. The recommendations are optional, so a rules-only assessment can still
+be exported.
 
-Cursor positioning is explicit (`new_x`/`new_y` on every write) rather than relying
-on fpdf2's version-dependent defaults, and each block starts at the left margin —
-this avoids the "not enough horizontal space" errors that come from a drifting X.
-
-    build_pdf(demographics, rule_result, fused, evidence, report, audit, disclaimer) -> bytes
+Every write sets new_x/new_y and starts from the left margin. fpdf2's defaults
+differ between versions, and a drifting x position causes "not enough
+horizontal space" errors.
 """
 from __future__ import annotations
 
@@ -25,9 +22,9 @@ TEAL = (14, 124, 134)
 MUTED = (107, 123, 134)
 SEV_RGB = {"normal": (31, 157, 116), "borderline": (200, 135, 27), "serious": (194, 74, 87)}
 
-# advance to the left margin on the next line (the safe default for paragraphs)
+# next line, back at the left margin
 _NL = dict(new_x=XPos.LMARGIN, new_y=YPos.NEXT)
-# stay on the same line, moving to the right of the cell (for table columns)
+# same line, just right of the cell (for table columns)
 _SAME = dict(new_x=XPos.RIGHT, new_y=YPos.TOP)
 
 _REPLACERS = {
@@ -74,7 +71,6 @@ class _PDF(FPDF):
             "lifestyle information and does not replace advice from a qualified "
             "healthcare professional."), **_NL)
 
-    # helpers -------------------------------------------------------------- #
     def para(self, text, h=5, size=10, style="", color=INK):
         self.set_x(self.l_margin)
         self.set_font("Helvetica", style, size)
@@ -97,7 +93,7 @@ def build_pdf(demographics, rule_result, fused, evidence, report, audit, disclai
     pdf.set_margins(16, 14, 16)
     pdf.add_page()
 
-    # --- verdict ----------------------------------------------------------- #
+    # overall result
     sev = fused.severity
     pdf.set_x(pdf.l_margin)
     pdf.set_font("Helvetica", "B", 22)
@@ -113,7 +109,7 @@ def build_pdf(demographics, rule_result, fused, evidence, report, audit, disclai
         pdf.para("Some results warrant prompt clinical attention - please contact your GP "
                  "or an appropriate service.", h=5, size=10, style="B", color=SEV_RGB["serious"])
 
-    # --- what drove the model's read (per-patient SHAP) -------------------- #
+    # SHAP drivers
     drivers = getattr(fused, "rf_drivers", None) or []
     if drivers:
         pdf.eyebrow("What drove the model's read")
@@ -127,7 +123,7 @@ def build_pdf(demographics, rule_result, fused, evidence, report, audit, disclai
             suffix = f" (value {_num(val)})" if val is not None else ""
             pdf.para(f"- {d.get('label', '')}{suffix}", h=5, size=10, style="B")
 
-    # --- severity table ---------------------------------------------------- #
+    # severity table
     pdf.eyebrow("Severity table")
     widths = (58, 34, 40, 36)
     pdf.set_x(pdf.l_margin)
@@ -155,7 +151,7 @@ def build_pdf(demographics, rule_result, fused, evidence, report, audit, disclai
         pdf.set_font("Helvetica", "B", 9)
         pdf.cell(widths[3], 6, _san(b.status.value), **_NL)
 
-    # --- recommendations --------------------------------------------------- #
+    # recommendations
     if report is not None:
         pdf.eyebrow("What your results suggest")
         pdf.para(report.explanation, h=5, size=10)
@@ -173,13 +169,13 @@ def build_pdf(demographics, rule_result, fused, evidence, report, audit, disclai
         pdf.para("Recommendations were not generated for this report (the language model "
                  "was not run).", h=5, size=10, style="I", color=MUTED)
 
-    # --- clinician signpost ------------------------------------------------ #
+    # flag-only markers
     if fused.signpost:
         pdf.eyebrow("Discuss with your clinician")
         names = ", ".join(f"{s['name']} ({s['status']})" for s in fused.signpost)
         pdf.para("Outside usual range, not addressed by lifestyle advice: " + names, h=5, size=9)
 
-    # --- evidence ---------------------------------------------------------- #
+    # evidence
     if evidence:
         pdf.eyebrow("Evidence sources")
         for e in evidence:

@@ -1,4 +1,4 @@
-"""retrieval_repository.py — owns the RAG guideline retriever (FAISS index)."""
+"""Loads the guideline retriever."""
 from __future__ import annotations
 
 import logging
@@ -22,7 +22,7 @@ class RetrievalRepository:
     def info(self) -> dict:
         dim = None
         try:
-            dim = self._retriever._embedder.dim  # noqa: SLF001 - read-only introspection
+            dim = self._retriever._embedder.dim  # noqa: SLF001
         except Exception:  # noqa: BLE001
             pass
         return {"embedder": self._embedder_name, "dim": dim, "index_size": self._retriever.size}

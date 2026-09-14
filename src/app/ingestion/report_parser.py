@@ -1,20 +1,10 @@
-"""
-report_parser.py — turn an uploaded blood report into a {code: value} draft.
+"""Parse an uploaded blood report (CSV, JSON or PDF) into biomarker values.
 
-Three input shapes, one output. CSV/JSON are structured and reliable. PDF uses a
-stateful, unit-anchored text extractor:
-
-  * track the "current analyte" as we scan, skipping Method/Machine/reference
-    noise lines, so a value is paired with the right label even when they are
-    separated in the extracted text;
-  * only accept a value whose printed unit is valid for that biomarker
-    (stops "199 pg/ml" being read as glucose), converting to the app's canonical
-    unit where needed (e.g. Vitamin D ng/mL → nmol/L);
-  * reject physiologically impossible values (plausibility bounds).
-
-Results are always best-effort and should be reviewed before use.
-
-    parse_upload(filename, data) -> ParseResult(biomarkers, demographics, notes)
+CSV and JSON are read directly. For PDFs the text is scanned line by line: each
+test name is paired with its value, a value is only accepted if its unit makes
+sense for that test, it's converted to the canonical unit, and implausible
+readings are dropped. Results are best-effort and meant to be checked by the
+user.
 """
 from __future__ import annotations
 
@@ -26,52 +16,47 @@ from dataclasses import dataclass, field
 from .catalog import LABEL_PRIORITY, SYNONYMS, label_index
 from .units import CANON_UNIT, detect_unit, is_plausible, to_canonical
 
-# Synonyms used to detect the analyte a line is labelling.
+# (synonym, code) pairs, longest synonym first.
 _LABEL_TERMS: list[tuple[str, str]] = sorted(
     [(alt.lower(), code) for code, alts in SYNONYMS.items() for alt in alts],
     key=lambda t: -len(t[0]))
 
-# Tokens that mean "this line is not an analyte result": method/instrument notes,
-# reference-range and interpretation prose, and derived rows that borrow a tracked
-# analyte's name (their numbers must never be captured as a primary measurement).
+# A line containing any of these isn't a result row: method and machine notes,
+# reference ranges, and derived values that reuse a test's name.
 _NOISE_LABEL = (
     "method", "machine", "description", "department", "sample type", "barcode",
     "booking", "patient name", "biological reference", "reference interval",
     "interpretation", "impression", "ratio", "non-hdl", "non hdl", "vldl",
     "v.l.d.l", "apolipo", "/hdl", "a/g", "sgot/sgpt", "desirable", "optimal",
     "normal range",
-    # derived quantities that contain a tracked analyte's name
+    # derived values
     "estimated average glucose", "average glucose", "mean plasma glucose",
     "bilirubin direct", "bilirubin indirect", "direct bilirubin", "indirect bilirubin",
     "globulin", "bun/creatinine", "urea /", "egfr", "rdw-sd",
     "mean platelet", "mpv", "pdw", "p-lcc",
-    # differential counts — not tracked analytes, but share cell-name wording
+    # differential counts
     "neutrophil", "lymphocyte", "monocyte", "eosinophil", "basophil", "immature",
 )
 
-# How many following lines may sit between a test name and its value in the
-# stacked layout (method / instrument / label-continuation lines).
+# How far ahead to look for a value printed on a later line than its test name.
 _LOOKAHEAD = 4
 
-# A numeric token that is not glued to another digit or a decimal point.
+# A number that isn't part of a longer number.
 _VALUE = re.compile(r"(?<![\d.])(\d{1,4}(?:\.\d+)?)(?![\d.])")
 
-# A line whose FIRST token is the reading, optionally behind an H/L abnormality
-# flag: "10.7 L* g/dL 12.0 - 15.0", "160 mg/dL <200".
+# A line that starts with the value, optionally after an H/L flag.
 _LEADING_VALUE = re.compile(r"^\s*(?:[HL]\*?\s+|\*\s*)?(\d{1,4}(?:\.\d+)?)(\D.*)?$")
 
-# A number introduced by one of these is a bound ("< 100", "0 - 200"), not a result.
+# A number straight after one of these is a range bound, not a result.
 _BOUND_CHARS = "<>=≥≤-–—/±"
 
 
 def match_label_span(low_line: str) -> tuple[str, int] | None:
-    """Which analyte a (lowercased) line labels, and the index the label ends at.
+    """Find which test a lowercased line names and where the name ends.
 
-    Returns (code, end) or None. Long prose and noise lines are rejected so an
-    interpretation paragraph can never masquerade as a result row. When several
-    synonyms match, the highest-priority code wins and then the longest term —
-    that ordering is what keeps "Glycosylated Hemoglobin (HbA1c)" from being read
-    as `hemoglobin`.
+    Returns (code, end) or None. Long lines and noise lines are skipped. When
+    several synonyms match, priority decides first and then the longest synonym,
+    which is what stops "Glycosylated Hemoglobin (HbA1c)" matching haemoglobin.
     """
     if len(low_line) > 80 or any(tok in low_line for tok in _NOISE_LABEL):
         return None
@@ -87,13 +72,12 @@ def match_label_span(low_line: str) -> tuple[str, int] | None:
 
 
 def match_label(low_line: str) -> str | None:
-    """The biomarker code a (lowercased) label line refers to, else None."""
     hit = match_label_span(low_line)
     return hit[0] if hit else None
 
 
 def _accept(code: str, value: float, rest: str):
-    """Unit-anchor and plausibility-check one candidate reading."""
+    """Check a candidate value's unit and plausibility."""
     canon, converted_from = to_canonical(code, value, detect_unit(rest))
     if canon is None or not is_plausible(code, canon):
         return None
@@ -101,12 +85,12 @@ def _accept(code: str, value: float, rest: str):
 
 
 def _same_line_value(code: str, tail: str):
-    """First unit-valid reading printed after the label on the same line.
+    """First valid value after the test name on the same line.
 
-    Every numeric token is tried in order, so digits belonging to the label itself
+    Numbers are tried left to right, so digits that belong to the name
     ("Vitamin D 25 - Hydroxy 79.2 ng/mL") are skipped when their unit doesn't
-    validate. Numbers introduced by a comparator or dash are reference bounds and
-    are never candidates.
+    fit. A number right after a comparator or dash is a range bound and is
+    skipped too.
     """
     for m in _VALUE.finditer(tail):
         before = tail[:m.start()].rstrip()
@@ -119,25 +103,21 @@ def _same_line_value(code: str, tail: str):
 
 
 def _stacked_value(code: str, line: str):
-    """Reading printed on its own line, e.g. "10.7 L* g/dL 12.0 - 15.0"."""
+    """Value on a line of its own, e.g. "10.7 L* g/dL 12.0 - 15.0"."""
     m = _LEADING_VALUE.match(line)
     return _accept(code, float(m.group(1)), m.group(2) or "") if m else None
 
 
 def extract_biomarkers_from_lines(lines: list[str]) -> tuple[dict[str, float], list[str]]:
-    """Layout-agnostic, unit-anchored extraction. Returns (biomarkers, notes).
+    """Pull biomarker values out of report text.
 
-    Handles both layouts real lab PDFs use, in a single pass:
+    Handles the two layouts lab PDFs use: the whole result on one line
+    ("Total Cholesterol 160 mg/dL 0 - 200"), or the test name with the value a
+    few lines further down. For the second, we look at most `_LOOKAHEAD` lines
+    ahead and stop at the next test name. The first value found for a code is
+    kept, so a summary table at the top of a report wins over the detail pages.
 
-      A. one row per test  — "Total Cholesterol 160 mg/dL 0 - 200"
-      B. stacked           — a test name, optional method/instrument lines, then
-                             "160 mg/dL <200" on a line of its own
-
-    A stacked value is only looked for within `_LOOKAHEAD` lines and the search
-    stops as soon as a *different* test is named, so a value can never be paired
-    with a label from further up the page. The first accepted reading for a code
-    wins, letting the summary table at the front of a report take precedence over
-    the detail pages that repeat it.
+    Returns (biomarkers, unit conversion notes).
     """
     found: dict[str, float] = {}
     conversions: list[str] = []
@@ -154,15 +134,15 @@ def extract_biomarkers_from_lines(lines: list[str]) -> tuple[dict[str, float], l
         if code in found:
             continue
 
-        taken = _same_line_value(code, line[end:])                      # layout A
-        if taken is None:                                               # layout B
+        taken = _same_line_value(code, line[end:])
+        if taken is None:
             for j in range(i + 1, min(i + 1 + _LOOKAHEAD, n)):
                 nxt = lines[j].strip()
                 if not nxt:
                     continue
                 other = match_label_span(nxt.lower())
                 if other is not None and other[0] != code:
-                    break            # a different test starts here — don't reach past it
+                    break  # next test starts here
                 taken = _stacked_value(code, nxt[other[1]:] if other else nxt)
                 if taken:
                     break
@@ -177,28 +157,24 @@ def extract_biomarkers_from_lines(lines: list[str]) -> tuple[dict[str, float], l
     return found, conversions
 
 
-# --- demographics ---------------------------------------------------------- #
-# Lab headers print age and sex in many shapes, all seen in real reports:
-#   "Female 61 yrs"                    "Male, 60 Yrs"
-#   "Gender: Female Age: 61 Yrs ..."   "Age/Gender : 60Y 0M 0D /Male"
-#   "DOB/Age/Gender : 61 Y/Female"
-_SEX_RE = re.compile(r"\b(female|male)\b", re.I)          # female first: it contains "male"
-_AGE_KEYED = re.compile(r"\bage\b\D{0,20}?(\d{1,3})", re.I)     # "Age: 61", "Age/Gender : 60Y"
-_AGE_UNITED = re.compile(r"\b(\d{1,3})\s*(?:y|yr|yrs|years)\b", re.I)   # "61 yrs"
+# Age and sex show up in lab headers in a few forms, e.g. "Female 61 yrs",
+# "Male, 60 Yrs", "Gender: Female Age: 61 Yrs" or "Age/Gender : 60Y 0M 0D /Male".
+_SEX_RE = re.compile(r"\b(female|male)\b", re.I)
+_AGE_KEYED = re.compile(r"\bage\b\D{0,20}?(\d{1,3})", re.I)  # "Age: 61"
+_AGE_UNITED = re.compile(r"\b(\d{1,3})\s*(?:y|yr|yrs|years)\b", re.I)  # "61 yrs"
 
-# Guideline and reference rows also mention ages ("Age > 19 years", "adults >=18
-# years"). They are prose about cut-offs, never the patient, so they are excluded.
+# Guideline text mentions ages as well ("Age > 19 years"), so those lines are skipped.
 _DEMO_NOISE = (
     "reference", "range", "normal", "adult", "screened", "recommend", "criteria",
     "interpretation", "above", "below", "goal", "target", "table", "population",
     "risk", "guideline", "category", "classification",
-    "(years)", "(yrs)",          # a column heading such as "Age (Years) Male"
+    "(years)", "(yrs)",  # column headings like "Age (Years) Male"
 )
 _ADULT_AGE = (18, 120)
 
 
 def _demographics_from_line(line: str) -> tuple[int | None, str | None]:
-    """Age and/or sex printed on one header line, or (None, None)."""
+    """(age, sex) found on one line; either can be None."""
     low = line.lower()
     if any(tok in low for tok in _DEMO_NOISE) or "<" in line or ">" in line:
         return None, None
@@ -215,13 +191,12 @@ def _demographics_from_line(line: str) -> tuple[int | None, str | None]:
 
 
 def extract_demographics(lines: list[str]) -> dict:
-    """Patient age and sex from a report header.
+    """Read the patient's age and sex from the report header.
 
-    A line carrying BOTH is trusted first — that is how every lab header prints
-    them, and requiring the pair rules out stray words like a "Age (Years) Male"
-    column heading. Only then does it fall back to the first standalone age and
-    the first standalone sex. Ages outside the adult range are ignored rather than
-    guessed at, so the form asks the user instead.
+    A line with both on it is used first, since that's how headers print them
+    and it avoids things like an "Age (Years) Male" column heading. Otherwise
+    the first age and the first sex found are used. Ages outside the adult range
+    are ignored, so the user gets asked instead.
     """
     first_age = first_sex = None
     for raw in lines:
@@ -302,13 +277,13 @@ def _parse_csv(data: bytes) -> ParseResult:
     cols = {c.lower().strip(): c for c in df.columns}
     label_col = next((cols[c] for c in ("biomarker", "name", "test", "analyte", "marker") if c in cols), None)
     value_col = next((cols[c] for c in ("value", "result", "reading") if c in cols), None)
-    if label_col and value_col:                              # long format
+    if label_col and value_col:  # one row per test
         for _, row in df.iterrows():
             code = _match(row[label_col])
             v = _coerce(row[value_col]) if code else None
             if code and v is not None:
                 res.biomarkers[code] = v
-    else:                                                     # wide format
+    else:  # one column per test
         row = df.iloc[0] if len(df) else {}
         for label in df.columns:
             code = _match(label)

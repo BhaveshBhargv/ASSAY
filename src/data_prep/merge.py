@@ -1,11 +1,8 @@
-"""
-merge.py — assemble one analysis table from all components and all cycles.
+"""Merge all components and cycles into one table.
 
-Per cycle:
-  DEMO is the base (one row per SEQN); every other component is LEFT-joined on
-  SEQN so demographics are never dropped by a missing lab. RXQ_RX is collapsed to a single
-  statin/metformin flag per person.
-Cycles are concatenated with a 'cycle' provenance column.
+Within a cycle, every component is left-joined onto DEMO by SEQN, so a missing
+lab result never drops a person. RXQ_RX is reduced to a single statin/metformin
+flag. The cycles are then stacked with a `cycle` column.
 """
 from __future__ import annotations
 
@@ -19,15 +16,15 @@ from .load import load_component, read_xpt
 
 log = logging.getLogger(__name__)
 
-# Drug-name substrings (lowercase) that indicate a statin or metformin.
+# Lowercase drug name fragments for statins and metformin.
 _STATIN_METFORMIN = (
     "metformin",
-    "statin",  # atorvastatin, simvastatin, rosuvastatin, pravastatin, etc.
+    "statin",  # atorvastatin, simvastatin, rosuvastatin, ...
 )
 
 
 def _statin_metformin_flag(rxq_path: Path) -> pd.DataFrame | None:
-    """Return SEQN -> statin_or_metformin (0/1) from an RXQ_RX file."""
+    """SEQN with a 0/1 statin_or_metformin flag, from an RXQ_RX file."""
     if not rxq_path.exists():
         return None
     df = read_xpt(rxq_path)
@@ -46,13 +43,12 @@ def _load_cycle(cycle, raw_dir: Path, reg: dict) -> pd.DataFrame:
     cycle_dir = raw_dir / cycle.name
     components: list[str] = list(reg["components"])
 
-    # Base table = demographics.
     demo = load_component(cycle_dir / cycle.filename("DEMO"))
     if demo is None:
         raise FileNotFoundError(f"DEMO missing for cycle {cycle.name}")
     merged = demo
 
-    # Left-join the remaining standard components (excluding DEMO and RXQ_RX).
+    # RXQ_RX is handled separately below.
     for base in components:
         if base in ("DEMO", "RXQ_RX"):
             continue
@@ -62,7 +58,6 @@ def _load_cycle(cycle, raw_dir: Path, reg: dict) -> pd.DataFrame:
             continue
         merged = merged.merge(comp, on="SEQN", how="left")
 
-    # RXQ_RX -> statin/metformin flag.
     rxq = _statin_metformin_flag(cycle_dir / cycle.filename("RXQ_RX"))
     if rxq is not None:
         merged = merged.merge(rxq, on="SEQN", how="left")
@@ -76,7 +71,7 @@ def _load_cycle(cycle, raw_dir: Path, reg: dict) -> pd.DataFrame:
 
 
 def build_merged(raw_dir: Path = RAW_DIR) -> pd.DataFrame:
-    """Merge all components across all cycles into one dataframe."""
+    """Merge every component from every cycle into one DataFrame."""
     reg = load_file_registry()
     frames = [_load_cycle(cycle, raw_dir, reg) for cycle in get_cycles()]
     combined = pd.concat(frames, ignore_index=True, sort=False)

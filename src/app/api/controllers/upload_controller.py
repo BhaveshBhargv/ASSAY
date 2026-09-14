@@ -1,4 +1,4 @@
-"""upload_controller.py — POST /upload (multipart file)."""
+"""POST /upload"""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends, File, UploadFile

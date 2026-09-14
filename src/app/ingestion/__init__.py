@@ -1,9 +1,4 @@
-"""
-ingestion — shared blood-report catalog and file parsing.
-
-Lifted out of the Streamlit UI so the API and the dashboard use ONE source of
-truth for biomarker panels, lab-report synonyms, and report parsing.
-"""
+"""Biomarker catalog and report parsing, shared by the API and the dashboard."""
 from __future__ import annotations
 
 from .catalog import (

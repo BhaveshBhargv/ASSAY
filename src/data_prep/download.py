@@ -1,9 +1,7 @@
-"""
-download.py — fetch NHANES .XPT files from the CDC for all configured cycles.
+"""Download the NHANES .XPT files from the CDC for every configured cycle.
 
-Idempotent: skips files that already exist. Blood-pressure component base name
-differs per cycle (BPX vs BPXO) and is resolved here. Missing optional files
-(e.g. a component absent in one cycle) are logged and skipped, not fatal.
+Files that are already downloaded are skipped, and a component that doesn't
+exist for a cycle is logged instead of stopping the run.
 """
 from __future__ import annotations
 
@@ -19,9 +17,8 @@ log = logging.getLogger(__name__)
 _TIMEOUT = 60
 _CHUNK = 1 << 16
 
-# Every SAS XPORT file begins with this magic. The CDC serves a soft-404 HTML
-# page with HTTP 200 for missing files, so a status check is NOT enough — we
-# must confirm the payload is genuinely an XPORT file.
+# Every XPORT file starts with this. The CDC site answers a missing file with an
+# HTML page and status 200, so the status code alone isn't enough to go on.
 _XPORT_MAGIC = b"HEADER RECORD*******"
 
 
@@ -34,7 +31,7 @@ def _is_xport(path: Path) -> bool:
 
 
 def _download_one(url: str, dest: Path) -> bool:
-    """Download a single file, validating it is a real XPORT payload."""
+    """Download one file and check it really is an XPORT file."""
     if dest.exists() and _is_xport(dest):
         log.info("skip (valid, exists): %s", dest.name)
         return True
@@ -54,16 +51,13 @@ def _download_one(url: str, dest: Path) -> bool:
             tmp.replace(dest)
         log.info("downloaded: %s", dest.name)
         return True
-    except requests.RequestException as exc:  # network error
+    except requests.RequestException as exc:
         log.error("failed %s: %s", url, exc)
         return False
 
 
 def download_all(raw_dir: Path = RAW_DIR) -> dict[str, list[str]]:
-    """
-    Download every component for every cycle. Files are namespaced per cycle in
-    subdirectories so identical base names across cycles never collide.
-    """
+    """Download every component for every cycle, into one folder per cycle."""
     reg = load_file_registry()
     base_url = reg["base_url"].rstrip("/")
     bases: list[str] = list(reg["components"])

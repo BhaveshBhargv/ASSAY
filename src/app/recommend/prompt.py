@@ -1,13 +1,8 @@
-"""
-prompt.py — prompt construction for grounded, non-diagnostic generation.
+"""Builds the prompts for the recommendation model.
 
-Uses a LangChain `ChatPromptTemplate` when available (real prompt-engineering
-seam), and falls back to plain string formatting so the module imports and tests
-run even without langchain installed.
-
-The system prompt encodes the four hard rules; the human prompt injects ONLY the
-patient assessment and the retrieved evidence pack (the model's sole knowledge
-source), each passage tagged [E1]..[En] so advice can cite it.
+The system prompt sets the rules (no diagnosis, only use the evidence, always
+explain why). The user prompt holds the assessment and the retrieved passages,
+labelled E1, E2, ... so each piece of advice can cite them.
 """
 from __future__ import annotations
 
@@ -34,7 +29,6 @@ with a GP/clinician. Do not prescribe medication or doses.
 
 Write for a layperson: clear, supportive, concrete. Return only the required JSON."""
 
-# What the model must fill in — the nine sections are described here for clarity.
 _TASK = """Using ONLY the evidence below, produce a lifestyle recommendation report for \
 this person. Cover, where the evidence supports it: a plain-English explanation of what \
 the results suggest (no diagnosis), then advice for general lifestyle, diet, exercise, \
@@ -46,7 +40,7 @@ section's array empty rather than inventing unsupported advice."""
 
 @dataclass
 class EvidenceItem:
-    """A retrieved passage tagged with a prompt-local id (E1, E2, ...)."""
+    """A retrieved passage with its id in the prompt (E1, E2, ...)."""
     id: str
     citation: str
     title: str
@@ -59,7 +53,7 @@ class EvidenceItem:
 
 
 def build_evidence_pack(results) -> list[EvidenceItem]:
-    """Turn retrieved RetrievalResult objects into tagged EvidenceItems."""
+    """Number the retrieved passages E1, E2, ..."""
     pack: list[EvidenceItem] = []
     for i, res in enumerate(results, start=1):
         c = res.chunk
@@ -94,7 +88,7 @@ def _render_flags(assessment: FusedAssessment) -> str:
 
 def build_user_prompt(demographics: dict, assessment: FusedAssessment,
                       evidence: list[EvidenceItem]) -> str:
-    """Assemble the human message: task + patient context + evidence + JSON contract."""
+    """The user message: the task, patient details, evidence and JSON format."""
     escalation = ""
     if assessment.escalated_by_rf:
         escalation = (
@@ -116,9 +110,11 @@ def build_user_prompt(demographics: dict, assessment: FusedAssessment,
 
 def build_messages(demographics: dict, assessment: FusedAssessment,
                    evidence: list[EvidenceItem]) -> tuple[str, str]:
-    """Return (system, user) strings. Kept framework-free; providers wrap these
-    in LangChain message objects. When langchain_core is present we still route
-    through a ChatPromptTemplate to honour the LangChain prompt seam."""
+    """Return the (system, user) prompt strings.
+
+    If langchain_core is installed they're passed through a ChatPromptTemplate,
+    otherwise the plain strings are returned.
+    """
     user = build_user_prompt(demographics, assessment, evidence)
     try:
         from langchain_core.prompts import ChatPromptTemplate
@@ -127,5 +123,5 @@ def build_messages(demographics: dict, assessment: FusedAssessment,
         )
         msgs = tmpl.format_messages(system=SYSTEM_PROMPT, user=user)
         return msgs[0].content, msgs[1].content
-    except Exception:  # pragma: no cover - fallback if langchain absent
+    except Exception:  # pragma: no cover
         return SYSTEM_PROMPT, user

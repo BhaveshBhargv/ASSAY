@@ -1,13 +1,7 @@
-"""
-explain.py — model interpretability: Gini importance + SHAP.
+"""Feature importance for the trained Random Forest, from Gini and SHAP.
 
-Produces:
-  * feature_importance.csv  — RF Gini importance and mean|SHAP| side by side
-  * feature_importance.png  — top-N bar chart
-  * shap_summary_<class>.png — SHAP beeswarm for each class (esp. 'serious')
-
-SHAP turns the forest from a black box into a per-prediction, auditable
-explanation — essential for a clinical-adjacent system.
+Writes feature_importance.csv, a bar chart of the top features and a SHAP
+summary plot for each class.
 """
 from __future__ import annotations
 
@@ -27,16 +21,18 @@ log = logging.getLogger(__name__)
 
 
 def _shap_values_3d(model, X: pd.DataFrame) -> np.ndarray:
-    """Return SHAP array shaped (n_samples, n_features, n_classes), robust to
-    the two shap output conventions (list-per-class vs stacked array)."""
+    """SHAP values as an (n_samples, n_features, n_classes) array.
+
+    Different shap versions return different shapes, so all of them are handled.
+    """
     explainer = shap.TreeExplainer(model)
     sv = explainer.shap_values(X)
-    if isinstance(sv, list):                      # older API: list per class
+    if isinstance(sv, list):  # older versions: a list per class
         return np.stack(sv, axis=-1)
     sv = np.asarray(sv)
-    if sv.ndim == 3:                              # (n, features, classes)
+    if sv.ndim == 3:  # (n, features, classes)
         return sv
-    if sv.ndim == 2:                              # binary edge case
+    if sv.ndim == 2:  # binary case
         return np.stack([-sv, sv], axis=-1)
     raise ValueError(f"unexpected SHAP shape {sv.shape}")
 
@@ -49,12 +45,10 @@ def explain(
     if len(X) > sample:
         X = X.sample(sample, random_state=seed)
 
-    # --- SHAP ------------------------------------------------------------- #
-    sv = _shap_values_3d(model, X)                      # (n, feat, classes)
-    mean_abs_shap = np.abs(sv).mean(axis=0)             # (feat, classes)
-    mean_abs_overall = mean_abs_shap.mean(axis=1)       # avg across classes
+    sv = _shap_values_3d(model, X)  # (n, features, classes)
+    mean_abs_shap = np.abs(sv).mean(axis=0)  # (features, classes)
+    mean_abs_overall = mean_abs_shap.mean(axis=1)
 
-    # --- Gini importance -------------------------------------------------- #
     gini = model.feature_importances_
 
     imp = pd.DataFrame({
@@ -69,7 +63,6 @@ def explain(
 
     _plot_top_importance(imp, reports_dir / "feature_importance.png")
 
-    # --- per-class SHAP beeswarm ----------------------------------------- #
     for i, cls in enumerate(LABEL_ORDER):
         try:
             plt.figure()
@@ -78,7 +71,7 @@ def explain(
             plt.tight_layout()
             plt.savefig(reports_dir / f"shap_summary_{cls}.png", dpi=130)
             plt.close()
-        except Exception as exc:  # plotting is best-effort
+        except Exception as exc:  # plots are optional
             log.warning("SHAP beeswarm for %s failed: %s", cls, exc)
 
     log.info("top features: %s", ", ".join(imp["feature"].head(8)))

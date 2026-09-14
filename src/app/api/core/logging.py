@@ -1,9 +1,7 @@
-"""
-logging.py — structured logging + per-request correlation id.
+"""Logging setup, plus middleware that gives each request an id.
 
-A `request_id` context variable is injected into every log record so a request's
-lines can be traced end to end. `RequestContextMiddleware` assigns the id, logs
-the request/response with latency, and echoes it back in the `X-Request-ID` header.
+The id is added to every log line for the request and returned in the
+X-Request-ID response header.
 """
 from __future__ import annotations
 
@@ -34,7 +32,7 @@ def configure_logging(level: str = "INFO") -> None:
     root.handlers.clear()
     root.addHandler(handler)
     root.setLevel(level.upper())
-    # quieten noisy third parties
+    # these log a lot at INFO
     for noisy in ("httpx", "urllib3", "sentence_transformers"):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 

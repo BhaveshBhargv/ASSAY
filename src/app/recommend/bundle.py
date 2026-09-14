@@ -1,12 +1,8 @@
-"""
-bundle.py — the final, presentation-ready recommendation object.
+"""The final recommendation: the cleaned report plus text the app adds itself.
 
-Composes the LLM-generated (and guard-cleaned) report with system-owned safety
-text that the LLM is NOT allowed to author: the non-diagnostic disclaimer, the
-clinician signpost for flag-only markers, and the urgent-referral note. Also
-carries the assessment, the evidence pack, and the groundedness audit so nothing
-in the report is unattributable — the whole thing serialises to JSON for the API
-and renders to Markdown for the UI / dissertation appendix.
+The disclaimer, clinician note and urgent-referral note are written here rather
+than by the LLM. The bundle serialises to JSON for the API and renders to
+Markdown.
 """
 from __future__ import annotations
 
@@ -32,7 +28,6 @@ class RecommendationBundle:
     disclaimer: str
     provider: str = ""
 
-    # ---- signpost / urgent text (system-owned) --------------------------- #
     @property
     def clinician_note(self) -> str:
         if not self.assessment.signpost:
@@ -46,7 +41,6 @@ class RecommendationBundle:
     def urgent_note(self) -> str:
         return _URGENT_NOTE if self.assessment.urgent_referral else ""
 
-    # ---- serialisation --------------------------------------------------- #
     def to_dict(self) -> dict:
         return {
             "provider": self.provider,
@@ -61,44 +55,43 @@ class RecommendationBundle:
             "groundedness": self.audit.to_dict(),
         }
 
-    # ---- human-readable render ------------------------------------------ #
     def render(self) -> str:
-        L: list[str] = []
-        L.append("# Personalised Lifestyle Recommendations\n")
-        L.append(f"**Overall risk pattern:** {self.assessment.severity}")
+        lines: list[str] = []
+        lines.append("# Personalised Lifestyle Recommendations\n")
+        lines.append(f"**Overall risk pattern:** {self.assessment.severity}")
         if self.assessment.escalated_by_rf:
-            L.append("_(pattern-based risk flagged by the model even though individual "
-                     "markers look near-normal)_")
+            lines.append("_(pattern-based risk flagged by the model even though individual "
+                         "markers look near-normal)_")
         if self.urgent_note:
-            L.append(f"\n> ⚠️ **Urgent:** {self.urgent_note}")
-        L.append("")
-        L.append("## What your results suggest")
-        L.append(self.report.explanation)
-        L.append("")
+            lines.append(f"\n> ⚠️ **Urgent:** {self.urgent_note}")
+        lines.append("")
+        lines.append("## What your results suggest")
+        lines.append(self.report.explanation)
+        lines.append("")
 
         for sec in ADVICE_SECTIONS:
             items = self.report.section(sec)
             if not items:
                 continue
-            L.append(f"## {SECTION_TITLES[sec]}")
+            lines.append(f"## {SECTION_TITLES[sec]}")
             for it in items:
                 cites = ", ".join(it.evidence)
-                L.append(f"- **{it.advice}**")
-                L.append(f"  - _Why:_ {it.rationale}")
-                L.append(f"  - _Evidence:_ {cites}")
-            L.append("")
+                lines.append(f"- **{it.advice}**")
+                lines.append(f"  - _Why:_ {it.rationale}")
+                lines.append(f"  - _Evidence:_ {cites}")
+            lines.append("")
 
         if self.clinician_note:
-            L.append("## Discuss with your clinician")
-            L.append(self.clinician_note)
-            L.append("")
+            lines.append("## Discuss with your clinician")
+            lines.append(self.clinician_note)
+            lines.append("")
 
-        L.append("## Evidence sources")
+        lines.append("## Evidence sources")
         for e in self.evidence:
             title = f" — {e.title}" if e.title else ""
-            L.append(f"- **{e.id}**: {e.citation}{title}")
-        L.append("")
+            lines.append(f"- **{e.id}**: {e.citation}{title}")
+        lines.append("")
 
-        L.append("---")
-        L.append(f"_{self.disclaimer}_")
-        return "\n".join(L)
+        lines.append("---")
+        lines.append(f"_{self.disclaimer}_")
+        return "\n".join(lines)

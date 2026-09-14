@@ -1,4 +1,4 @@
-"""retrieve_controller.py — POST /retrieve."""
+"""POST /retrieve"""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends

@@ -1,15 +1,11 @@
-"""
-features.py — clinically-motivated feature engineering (stateless, no leakage).
+"""Engineered features. Each row is handled on its own, so there's nothing to fit.
 
-Derived features give the Random Forest interaction signal in explicit form
-(all blood-derived — no anthropometric inputs):
-  tc_hdl_ratio      total cholesterol / HDL     (atherogenic ratio)
-  tg_hdl_ratio      triglycerides / HDL          (insulin-resistance surrogate)
-  tyg_index         ln(TG * fasting glucose / 2) (validated IR marker)
-  age_band          0..4 ordinal decade-ish bands
+tc_hdl_ratio   total cholesterol / HDL
+tg_hdl_ratio   triglycerides / HDL, linked to insulin resistance
+tyg_index      ln(TG * fasting glucose / 2), another insulin resistance marker
+age_band       age group from 0 to 4
 
-Applied AFTER imputation so ratios are not spuriously NaN. All row-wise
-transforms — identical on train and test, so nothing to fit.
+These are added after imputation so the ratios don't come out as NaN.
 """
 from __future__ import annotations
 

@@ -1,8 +1,7 @@
-"""
-test_parser.py — report parser: unit-anchoring, conversion, plausibility.
+"""Report parser tests: pairing labels with values, unit checks and conversion.
 
-Uses synthetic lines that mimic a real lab-report layout (label / Method / Machine
-/ value-unit-range), so it runs offline with no PDF fixture.
+The inputs are text lines laid out the way real lab reports are, so no PDF
+files are needed.
 
 Run:  python tests/test_parser.py
 """
@@ -23,7 +22,7 @@ from app.ingestion.report_parser import (  # noqa: E402
 )
 from app.ingestion.units import is_plausible, to_canonical  # noqa: E402
 
-# label / Method / Machine / value — the layout that broke the old parser.
+# label, Method and Machine lines, then the value on a line of its own
 _LINES = [
     "Total Cholesterol", "Method: Cholesterol Oxidase", "Machine: BECKMAN AU5800",
     "204.7 mg/dl Desirable : <200",
@@ -31,7 +30,7 @@ _LINES = [
     "Haemoglobin (HB) :", "15.3 g/dL 13.0-17.0",
     "HbA1c", "5.90 % 4.2 - 5.7",
     "Vitamin D", "17.26 ng/ml 30 - 100",
-    "Vitamin B12", "199 pg/ml 211 - 912",          # must NOT become glucose
+    "Vitamin B12", "199 pg/ml 211 - 912",          # must not be read as glucose
     "Blood Glucose Fasting", "92.24 mg/dl 70 - 100",
     "Platelet count", "246 10^3/uL 150-410",
 ]
@@ -47,19 +46,18 @@ def test_stateful_extraction_pairs_label_and_value():
 
 
 def test_unit_anchoring_rejects_wrong_unit():
-    # glucose must skip "199 pg/ml" (Vitamin B12) and take the mg/dl reading
+    # glucose has to skip the pg/ml B12 value and take the mg/dl one
     found, _ = extract_biomarkers_from_lines(_LINES)
     assert found["fasting_glucose_mgdl"] == 92.24
 
 
 def test_vitamin_d_unit_conversion():
     found, conv = extract_biomarkers_from_lines(_LINES)
-    assert abs(found["vitamin_d"] - 17.26 * 2.496) < 0.1     # ng/mL → nmol/L
+    assert abs(found["vitamin_d"] - 17.26 * 2.496) < 0.1     # ng/mL to nmol/L
     assert any("vitamin_d" in c for c in conv)
 
 
 def test_plausibility_rejects_garbage():
-    # implausible values (bad extraction) are dropped
     found, _ = extract_biomarkers_from_lines(["Haemoglobin", "1 g/dL 13-17"])
     assert "hemoglobin" not in found
     found2, _ = extract_biomarkers_from_lines(["MCV", "12 fL 83-101"])
@@ -85,23 +83,21 @@ def test_structured_csv_long_format():
     assert res.biomarkers["hba1c_pct"] == 6.1 and res.biomarkers["triglycerides_mgdl"] == 205.0
 
 
-# --- single-row table layout: "Label  Value  Unit  Range" on ONE line --------- #
-# The layout used by the summary tables at the front of most lab reports. The
-# original parser only accepted values on a line of their own, so it skipped
-# these entirely.
+# One row per test, with label, value, unit and range on the same line. Most
+# reports open with a summary table like this.
 _ROW_LINES = [
     "Test Name Result Range",
     " Hemoglobin 10.7 g/dL 12.0 - 15.0",
     " TLC 12.6 10^3/µl 4 - 10",
     " Platelet Count 346 10^3/µl 150 - 410",
     " Glycosylated Hemoglobin (HbA1c) 6.8 % 0 - 5.7",
-    " Estimated Average Glucose 148.46 mg/dL —",      # derived: must be ignored
+    " Estimated Average Glucose 148.46 mg/dL —",      # derived, should be ignored
     " Glucose Fasting 152.2 mg/dL 70 - 100",
     " Calcium Serum 10.2 mg/dL 8.8 - 10.0",
     " Total Cholesterol 160 mg/dL 0 - 200",
     " Triglycerides 167.9 mg/dL 0 - 150",
-    " Non HDL Cholesterol 116.3 mg/dL 0 - 130",       # derived: must be ignored
-    " Vitamin D 25 - Hydroxy 79.2 ng/mL 30 - 100",    # digits inside the label
+    " Non HDL Cholesterol 116.3 mg/dL 0 - 130",       # derived, should be ignored
+    " Vitamin D 25 - Hydroxy 79.2 ng/mL 30 - 100",    # digits in the label
 ]
 
 
@@ -120,13 +116,12 @@ def test_hba1c_label_containing_haemoglobin_is_not_haemoglobin():
     """"Glycosylated Hemoglobin (HbA1c)" must resolve to HbA1c, not haemoglobin."""
     found, _conv = extract_biomarkers_from_lines(_ROW_LINES)
     assert found["hba1c_pct"] == 6.8
-    assert found["hemoglobin"] == 10.7                 # the real haemoglobin row
+    assert found["hemoglobin"] == 10.7
 
 
 def test_derived_rows_are_never_captured():
     found, _conv = extract_biomarkers_from_lines(_ROW_LINES)
-    # 148.46 (estimated average glucose) must not be mistaken for fasting glucose,
-    # and 116.3 (non-HDL) must not be mistaken for HDL.
+    # estimated average glucose isn't fasting glucose, and non-HDL isn't HDL
     assert found["fasting_glucose_mgdl"] == 152.2
     assert found.get("hdl_mgdl") is None
 
@@ -164,7 +159,7 @@ def test_value_is_not_paired_with_a_distant_label():
     assert found["potassium"] == 4.13
 
 
-# --- patient demographics from the report header ----------------------------- #
+# demographics from the report header
 _HEADER_SHAPES = [
     ("Female 61 yrs", 61, "female"),
     ("Male, 60 Yrs", 60, "male"),
@@ -182,7 +177,7 @@ def test_demographics_from_header_shapes():
 
 
 def test_demographics_ignores_reference_and_prose_lines():
-    """Guideline cut-offs mention ages too; none of them describe the patient."""
+    """Reference ranges mention ages too, but not the patient's."""
     for line in ["Non diabetic adults >=18 years <5.7",
                  "Age > 19 years", "Age < 19 years",
                  "above 20 years of age must be screened for abnormal lipid levels.",
@@ -191,7 +186,7 @@ def test_demographics_ignores_reference_and_prose_lines():
 
 
 def test_demographics_prefers_the_line_carrying_both():
-    """A paired header wins over a stray age or sex elsewhere on the page."""
+    """A line with both age and sex wins over a stray age elsewhere."""
     got = extract_demographics(
         ["Total Cholesterol 160 mg/dL", "78 yrs", "Gender: Female Age: 61 Yrs"])
     assert got == {"age": 61, "sex": "female"}

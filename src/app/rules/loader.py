@@ -1,11 +1,8 @@
-"""
-loader.py — parse clinical_rules.yaml into a validated RuleSet.
+"""Loads config/clinical_rules.yaml into a validated RuleSet.
 
-Validation (fail fast at load, not at inference):
-  * every band has a known status/severity
-  * scalar bands are contiguous and gap-free across the number line
-Sex-specific (dict) thresholds skip the contiguity check (validated per sex at
-runtime instead). Adding a biomarker to the YAML needs no code change here.
+Bands are checked when the file is loaded, so a broken rule fails straight
+away rather than during a request. Sex-specific bands can't be checked for gaps
+here and are resolved when a value is classified.
 """
 from __future__ import annotations
 
@@ -36,12 +33,12 @@ def _band(raw: dict) -> Band:
 
 
 def _validate_contiguity(code: str, bands: tuple[Band, ...]) -> None:
-    """For scalar-only bands, ensure ascending, gap-free, full coverage."""
+    """Check scalar bands are in order and cover every value with no gaps."""
     scalar = all(
         not isinstance(b.min, dict) and not isinstance(b.max, dict) for b in bands
     )
     if not scalar:
-        return  # sex-specific set — checked at runtime
+        return  # sex-specific bands are checked at classification time
     prev_hi = -math.inf
     for i, b in enumerate(bands):
         lo = b.min if b.min is not None else -math.inf
@@ -72,7 +69,6 @@ def load_ruleset(path: Path = DEFAULT_RULES_PATH) -> RuleSet:
         _validate_contiguity(code, bands)
         ref = spec.get("reference_range", {})
         tier = spec.get("tier", "actionable")
-        # label_role: secondary if listed; else core for actionable, none for flag-only.
         if code in secondary_markers:
             label_role = "secondary"
         elif tier == "actionable":

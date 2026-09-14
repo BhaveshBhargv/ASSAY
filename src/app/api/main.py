@@ -1,11 +1,8 @@
-"""
-main.py — FastAPI application factory.
+"""Creates the FastAPI app.
 
-Wires middleware (request-id logging, CORS), exception handlers, and the resource
-routers, and warms the heavy singletons on startup. Swagger UI is at /docs,
-ReDoc at /redoc, the raw schema at /openapi.json.
+Swagger UI is served at /docs, ReDoc at /redoc and the schema at /openapi.json.
 
-Run:  uvicorn app.api.main:app --app-dir src --reload
+Run: uvicorn app.api.main:app --app-dir src --reload
 """
 from __future__ import annotations
 

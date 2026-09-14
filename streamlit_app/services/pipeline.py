@@ -1,13 +1,9 @@
-"""
-pipeline.py — the Streamlit-facing wrapper over the Phase 3-6 engine.
+"""The dashboard's wrapper around the engine.
 
-Splits the work into two calls so the dashboard is useful even without a running
-LLM:
-    assess()   — rules + Random Forest + fusion + RAG retrieval (always available)
-    generate() — the LLM step (grounded recommendations), which may be offline
+assess() runs the rules, Random Forest, fusion and retrieval, and always works.
+generate() runs the LLM step, which fails if no model can be reached.
 
-Heavy collaborators (rule engine, FAISS retriever, RF) load once via
-`st.cache_resource`; the LLM provider is built per request (cheap).
+The rule engine, retriever and model are loaded once with st.cache_resource.
 """
 from __future__ import annotations
 
@@ -31,14 +27,14 @@ class Assessment:
 
 @dataclass
 class Recommendations:
-    report: object            # RecommendationReport
-    audit: object             # GuardReport
+    report: object  # RecommendationReport
+    audit: object  # GuardReport
     error: str = ""
 
 
 @st.cache_resource(show_spinner="Loading models and guideline index…")
 def load_core():
-    """Rule engine + FAISS retriever + RF adapter. Cached for the session."""
+    """Load the rule engine, retriever and RF model."""
     from app.domain.services.rule_engine import RuleEngine
     from app.rag.retriever import GuidelineRetriever
     from app.recommend.engine import RiskAdapter
@@ -48,7 +44,7 @@ def load_core():
     retriever = GuidelineRetriever.load()
     try:
         risk = RiskAdapter()
-    except Exception:  # noqa: BLE001 - model optional; degrade to rules-only
+    except Exception:  # noqa: BLE001 - no model, so rules only
         risk = None
     return rule_engine, retriever, risk
 
@@ -69,8 +65,7 @@ def rf_available() -> bool:
 
 def generate(provider_kind: str, model: str | None, demographics: dict,
              assessment: Assessment, llm_recheck: bool = False) -> Recommendations:
-    """Run the LLM step. Any provider/connection failure is returned, not raised,
-    so the dashboard can show a clean empty state."""
+    """Run the LLM step. Errors are returned in `error` instead of being raised."""
     from app.recommend.generator import generate_report, GenerationError
     from app.recommend.guards import verify
     from app.recommend.prompt import build_messages
@@ -87,7 +82,7 @@ def generate(provider_kind: str, model: str | None, demographics: dict,
         report = generate_report(provider, system, user)
     except GenerationError as exc:
         return Recommendations(None, None, error=f"The model returned an unusable response. {exc}")
-    except Exception as exc:  # noqa: BLE001 - typically no Ollama running
+    except Exception as exc:  # noqa: BLE001 - usually Ollama isn't running
         return Recommendations(None, None,
                                error=f"Could not reach the language model ({provider_kind}). "
                                      f"Is it running? Details: {exc}")
@@ -98,7 +93,7 @@ def generate(provider_kind: str, model: str | None, demographics: dict,
 
 def build_bundle(assessment: Assessment, recs: Recommendations,
                  provider_name: str = "") -> RecommendationBundle | None:
-    """Compose a bundle for PDF export (only when recommendations exist)."""
+    """Bundle for the PDF export, or None when there are no recommendations."""
     if recs is None or recs.report is None:
         return None
     return RecommendationBundle(

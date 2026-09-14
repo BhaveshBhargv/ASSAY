@@ -1,39 +1,40 @@
-# Phase 2 — NHANES Data Preparation
+# Phase 2: NHANES data preparation
 
-**Author:** Bhavesh Bhargava — MSc Advanced Data Science
-**Status:** Implemented (`src/data_prep/`), verified on a synthetic smoke test.
-**Cycles used:** NHANES 2013–2014, 2015–2016, 2017–March 2020 (pre-pandemic).
+**Author:** Bhavesh Bhargava, MSc Advanced Data Science
+**Code:** `src/data_prep/`
+**Data:** NHANES 2013–2014, 2015–2016 and 2017–March 2020 (the pre-pandemic release)
 
-> Every decision below was explicitly approved before implementation. This
-> document is the audit trail a viva examiner will ask for.
+How the NHANES survey data was turned into the training dataset, and the
+reasoning behind each choice.
 
 ---
 
-## 1. Approved decisions (the contract)
+## 1. Decisions
 
-| Area | Decision | Rationale |
+| Area | Decision | Reason |
 |---|---|---|
-| **Biomarker scope** | **Blood-only panel (27 markers)** | Cardiometabolic + CBC + liver + kidney + electrolytes + Vitamin D. **BP/BMI/waist removed entirely** (not blood tests; unavailable from a report at inference). Markers tiered: 21 *actionable* vs 6 *flag-only* (electrolytes/WBC/platelets — reported & escalated, never lifestyle advice). Weight/BP → GP signpost (documented limitation). |
-| **Cohort** | Adults only (age ≥ 18) | Paediatric records use percentile-based reference ranges (not adult thresholds) and lack the adult diagnosis/medication questionnaires; their labels would be clinically invalid. |
-| **Sample** | Full (non-fasting) sample; HbA1c as glycaemic marker | Keeps the full ~30k sample instead of collapsing to the fasting subsample. |
-| **Blood biomarkers — mandatory** (drop if missing) | HbA1c, total cholesterol, HDL | Full-sample blood analytes; label-defining, can't fabricate ground truth. |
-| **Blood biomarkers — supplementary** (imputed) | Triglycerides, LDL, fasting glucose | Fasting-subsample blood analytes; used in Layer-1 *only when observed*. |
-| **Clinical measurements** | SBP, DBP, BMI, waist — **not ingested** | Not blood tests, and unavailable from a report at inference. Removed from the file registry entirely rather than imputed; weight and blood pressure are signposted to a GP. See §3 and §10. |
-| **Missing values** | Hybrid: drop-if-mandatory-missing, median-impute supplementary + soft predictors | Balances integrity and retention. |
-| **Target label** | 3-layer scheme → `Normal / Borderline / Serious` | See §4. Layer 2 is the project's novelty. |
-| **RF features** | Blood analytes + **age and sex only** | Diagnosis/medication vars are label-only → no leakage. Socio-demographics dropped: absent from a blood report and not lifestyle-actionable. See §6. |
-| **Outliers** | Plausibility→NaN, then winsorise 1st/99th pct | Removes data errors, tames real extremes, deletes no rows. |
-| **Scaling** | Unscaled matrix for RF **+** train-fit StandardScaler copy | Trees are scale-invariant; scaled copy kept for distance-based use. |
-| **Encoding** | One-hot sex & ethnicity; ordinal education/BMI/age bands | Avoids false ordinality on nominal variables. |
-| **Leakage control** | Split first; fit winsor/imputer/scaler on train only | Standard, defensible. |
+| **Biomarkers** | **Blood tests only, 27 markers** | Cardiometabolic, full blood count, liver, kidney, electrolytes and vitamin D. Blood pressure, BMI and waist were removed completely, since they aren't blood tests and wouldn't be on a blood report. 21 markers are *actionable* and 6 are *flag-only* (electrolytes, WBC, platelets): flag-only markers are reported and escalated but never turned into lifestyle advice. Weight and blood pressure are left to the GP, which is a stated limitation. |
+| **Cohort** | Adults only (18 and over) | Children's results are judged against age-based ranges rather than adult thresholds, and children don't answer the adult diagnosis and medication questions, so their labels wouldn't be valid. |
+| **Sample** | Full (non-fasting) sample, with HbA1c as the glucose marker | Keeps the whole sample (35,706 people before the adult filter) instead of shrinking to the fasting subsample. |
+| **Mandatory biomarkers** (rows dropped if missing) | HbA1c, total cholesterol, HDL | Measured across the full sample and needed to build the label, which can't be imputed. |
+| **Supplementary biomarkers** (imputed) | The other model biomarkers: triglycerides, LDL and fasting glucose, plus the blood count, liver and kidney markers | The fasting tests only exist for the fasting subsample and the others have gaps. Layer 1 only uses them where they were actually measured, because labels are built before imputation. |
+| **Clinical measurements** | SBP, DBP, BMI and waist are **not loaded** | Not blood tests and not on a blood report, so they were removed from the file list rather than imputed. See §3 and §10. |
+| **Missing values** | Drop rows missing a mandatory marker; median-impute the supplementary markers plus income ratio and education | Keeps as many rows as possible without inventing labels. |
+| **Target label** | Three layers → `normal / borderline / serious` | See §4. |
+| **Model features** | Blood markers plus **age and sex only** | Diagnosis and medication answers are only used for the label, so they can't leak into the features. Ethnicity, income and education were dropped because they aren't on a blood report and lifestyle can't change them. See §6. |
+| **Outliers** | Implausible values set to NaN, then winsorised at the 1st/99th percentile | Removes data errors and limits real extremes without deleting rows. |
+| **Scaling** | Unscaled matrix for the Random Forest, plus a copy scaled with a StandardScaler fitted on the training set | Trees don't need scaling; the scaled copy is kept for distance-based methods. |
+| **Encoding** | Sex one-hot encoded, age band as an ordinal | Avoids implying an order between the sex codes. |
+| **Leakage** | Split first, then fit winsorising, imputation and scaling on the training set only | Standard practice. |
 
 ---
 
-## 2. Source files pulled per cycle
+## 2. Files downloaded for each cycle
 
-Naming differs by cycle (`_H`, `_I`, `P_`); the loader resolves this automatically.
+File names differ between cycles (`_H`, `_I`, `P_`); the loader works this out
+from the config.
 
-| Domain | Base file | Canonical variables |
+| Area | Base file | Variables |
 |---|---|---|
 | Demographics | `DEMO` | age (`RIDAGEYR`), sex (`RIAGENDR`), ethnicity (`RIDRETH3`), education (`DMDEDUC2`), income ratio (`INDFMPIR`), weights, survey design |
 | HbA1c | `GHB` | `LBXGH` |
@@ -41,208 +42,203 @@ Naming differs by cycle (`_H`, `_I`, `P_`); the loader resolves this automatical
 | HDL | `HDL` | `LBDHDD` |
 | Triglycerides / LDL | `TRIGLY` | `LBXTR`, `LBDLDL` (fasting) |
 | Fasting glucose | `GLU` | `LBXGLU` (fasting) |
-| Complete blood count | `CBC` | `LBXHGB`, `LBXHCT`, `LBXRBCSI`, `LBXMCVSI`, `LBXMCHSI`, `LBXMC`, `LBXRDW`, `LBXWBCSI`, `LBXPLTSI` |
-| Biochemistry (liver / kidney / electrolytes) | `BIOPRO` | `LBXSATSI`, `LBXSASSI`, `LBXSAPSI`, `LBXSAL`, `LBXSTB`, `LBXSCR`, `LBXSBU`, `LBXSNASI`, `LBXSKSI`, `LBXSCLSI`, `LBXSCA` |
-| Vitamin D | `VID` | `LBXVIDMS` — 2013–16 only; absent in the `P_` cycle, skipped gracefully |
-| Diabetes Q | `DIQ` | `DIQ010/050/070` — **label-only** |
-| BP/cholesterol Q | `BPQ` | `BPQ080/090D/020/040A` — **label-only** |
-| Medical conditions | `MCQ` | `MCQ160C/E/F` — **label-only** |
-| Medications | `RXQ_RX` | statin/metformin flag — **label-only** |
+| Full blood count | `CBC` | `LBXHGB`, `LBXHCT`, `LBXRBCSI`, `LBXMCVSI`, `LBXMCHSI`, `LBXMC`, `LBXRDW`, `LBXWBCSI`, `LBXPLTSI` |
+| Biochemistry (liver, kidney, electrolytes) | `BIOPRO` | `LBXSATSI`, `LBXSASSI`, `LBXSAPSI`, `LBXSAL`, `LBXSTB`, `LBXSCR`, `LBXSBU`, `LBXSNASI`, `LBXSKSI`, `LBXSCLSI`, `LBXSCA` |
+| Vitamin D | `VID` | `LBXVIDMS`, 2013–16 only (not in the `P_` release, so skipped there) |
+| Diabetes questionnaire | `DIQ` | `DIQ010/050/070`, **label only** |
+| BP/cholesterol questionnaire | `BPQ` | `BPQ080/090D/020/040A`, **label only** |
+| Medical conditions | `MCQ` | `MCQ160C/E/F`, **label only** |
+| Medications | `RXQ_RX` | statin/metformin flag, **label only** |
 
 ---
 
-## 3. NHANES-specific reconciliations
+## 3. NHANES quirks
 
-**Body measures and blood pressure are not pulled at all.** `BMX` and
-`BPX`/`BPXO` were ingested in an early revision, which forced a methodology
-reconciliation between the manual auscultation used in 2013–16 (`BPXSY/DI 1–4`)
-and the oscillometric devices used in 2017–20 (`BPXOSY/ODI 1–3`). Once the study
-scope was fixed to a **blood-test report**, these stopped being inputs the system
-could ever receive at inference, so they were dropped from the file registry
-(`config/nhanes_files.yaml`) and the harmonisation step was deleted with them.
-Weight and blood pressure are signposted to a GP instead — a documented
-limitation, and the change also improved label quality (see §10).
+**Body measures and blood pressure aren't downloaded.** An early version loaded
+`BMX` and `BPX`/`BPXO`, which meant reconciling manual blood pressure readings in
+2013–16 (`BPXSY/DI 1–4`) with the automatic readings in 2017–20
+(`BPXOSY/ODI 1–3`). Once the project was limited to blood test reports, these
+could never be inputs, so they were removed from `config/nhanes_files.yaml`
+together with the reconciliation code. Weight and blood pressure are left to the
+GP. This is a limitation, but it also improved the labels (see §9).
 
-**Cycle naming.** Components are suffixed `_H` (2013–14) and `_I` (2015–16) but
-prefixed `P_` for the 2017–20 pre-pandemic release. `Cycle.filename()` resolves
-this from config, so adding a cycle needs no code change.
+**Cycle names.** Files end in `_H` (2013–14) and `_I` (2015–16) but start with
+`P_` in the 2017–20 release. `Cycle.filename()` builds the name from the config,
+so a new cycle doesn't need code changes.
 
-**Survey-weight naming.** The MEC weight is `WTMEC2YR` in the two-year cycles and
-`WTMECPRP` in the pre-pandemic release; `load_component` harmonises both to
-`wtmec`.
+**Survey weight names.** The examination weight is `WTMEC2YR` in the two-year
+cycles and `WTMECPRP` in the pre-pandemic release. `load_component` renames both
+to `wtmec`.
 
-**Fasting-subsample problem.** Fasting glucose, triglycerides, and LDL exist
-only in the morning fasting subsample (~⅔ missing sample-wide). Making them
-*supplementary* (imputed, non-mandatory) preserves the full sample while still
-using them in Layer-1 labelling whenever they are genuinely observed.
+**Fasting subsample.** Fasting glucose, triglycerides and LDL are only measured
+in the morning fasting subsample, so about two thirds of people don't have them.
+Treating them as supplementary (imputed, not mandatory) keeps the full sample,
+and Layer 1 still uses them whenever they were measured.
 
 ---
 
-## 4. The three-layer label (methodological core)
+## 4. The three-layer label
 
-Implemented in `labeling.py`. Severity ordinal: `normal(0) < borderline(1) < serious(2)`.
+Built in `labeling.py`. Severity order: `normal (0) < borderline (1) < serious (2)`.
 
-**Layer 1 — rule-based single-biomarker labelling.** Each biomarker is compared
-to NICE/WHO/NHS thresholds (`config/clinical_thresholds.yaml`). The record's
-Layer-1 label is the *max* severity across biomarkers. This mirrors a GP reading
-a report.
+**Layer 1: blood results.** Each record is labelled by the same rule engine the
+app uses (`config/clinical_rules.yaml`, see Phase 3), with the same rule for the
+overall result: any serious actionable marker makes the record serious, and one
+borderline core marker or at least two borderline secondary markers make it
+borderline. Flag-only markers are ignored. This is roughly what a GP would read
+off the report.
 
-**Layer 2 — diagnosis & medication proxy labelling (the novelty).** For records
-where no single biomarker breaches a threshold, questionnaire evidence raises the
-label: diagnosed/borderline diabetes or glucose-lowering meds → ≥ Borderline;
-diagnosed high cholesterol or lipid meds → ≥ Borderline; treated hypertension →
-≥ Borderline; established CVD (CHD/MI/stroke) → Serious; statin/metformin use →
-≥ Borderline.
+**Layer 2: diagnoses and medication.** Questionnaire answers can raise the label
+for people whose bloods don't show the problem:
+- diagnosed or borderline diabetes, or taking insulin or diabetes tablets → at least borderline
+- diagnosed high cholesterol, or taking cholesterol medication → at least borderline
+- high blood pressure that's being treated → at least borderline
+- coronary heart disease, heart attack or stroke → serious
+- a statin or metformin in the prescription data → at least borderline
 
-**Layer 3 — conflict resolution.** `final = max(Layer1, Layer2)`. Clinical
-evidence can only *raise* severity, never lower it. Documented explicitly because
-a reviewer will challenge it.
+These rules are written in `labeling.py`. The `diagnosis_proxies` section of
+`config/clinical_thresholds.yaml` describes the same rules but isn't read by the
+code.
 
-**Leakage guard (critical).** The Layer-2 variables build the label and are then
-**dropped from the feature matrix**. The Random Forest therefore never sees the
-diagnosis — it must recover the hidden-risk signal from *biomarker patterns
-alone*. This is exactly the "combinations no single rule catches" requirement.
-The pipeline flags every Layer-2 upgrade (`label_upgraded_by_l2`) so the novelty
-can be quantified as its own evaluation slice in Phase 4/9. An automated test
-asserts no label-only column ever appears in the feature matrix.
+**Layer 3: combining them.** `final = max(Layer 1, Layer 2)`, so questionnaire
+answers can raise the severity but never lower it.
+
+**Keeping the label out of the features.** The Layer 2 columns are used to build
+the label and nothing else. The feature matrix is built from a fixed list of
+columns (`encode_scale.py`) that doesn't include any of them, so the Random
+Forest never sees a diagnosis. The idea was that it would have to find this
+hidden risk from the blood results alone. Every record that Layer 2 raised is
+marked (`label_upgraded_by_l2`) so it can be evaluated separately; Phase 4 §5
+reports how the model did on these records.
 
 ---
 
-## 5. Pipeline order (leakage-safe)
+## 5. Pipeline order
 
 ```
 merge cycles (SEQN)
-  → plausibility bounds → NaN            (stateless)
-  → BUILD LABELS                         (on observed values, pre-imputation)
-  → drop rows missing mandatory labs
-  → stratified train/test split          ← nothing is fit before this line
-  → winsorise            (fit on train)
-  → impute supplementary (fit on train)
-  → feature engineering  (stateless)
-  → build UNSCALED matrix (RF) + SCALED copy (fit on train)
-  → persist data + artifacts + methods report
+  → implausible values → NaN             (no fitting)
+  → build labels                         (on measured values, before imputation)
+  → drop rows missing mandatory markers
+  → stratified train/test split          ← nothing is fitted before this point
+  → winsorise            (fitted on train)
+  → impute supplementary (fitted on train)
+  → engineered features  (no fitting)
+  → build the unscaled matrix (RF) and a scaled copy (fitted on train)
+  → save the data, fitted objects and summary
 ```
 
-Labels are built **before** imputation so Layer-1 severity is only ever driven by
-genuinely observed biomarkers.
+Labels are built **before** imputation, so Layer 1 only ever uses measured
+values.
 
-## 6. Feature set produced (27 columns)
+## 6. Features (27 columns)
 
-The model is deliberately **clinical-only** — biomarkers plus age and sex. A blood
-report does not carry socio-demographics, and they are not lifestyle-actionable,
-so ethnicity, income ratio and education were dropped as features.
+The model only uses clinical inputs: biomarkers, age and sex. A blood report
+doesn't include social or demographic details and lifestyle can't change them,
+so ethnicity, income ratio and education aren't features.
 
-**Continuous (24):** `age` + the 20 actionable blood analytes
+**Continuous (24):** `age`, the 20 actionable blood markers
 (`hba1c_pct, fasting_glucose_mgdl, total_chol_mgdl, ldl_mgdl, hdl_mgdl,
 triglycerides_mgdl, hemoglobin, hematocrit, rbc, mcv, mch, mchc, rdw, alt, ast,
-alp, albumin, total_bilirubin, creatinine, bun`) + engineered
+alp, albumin, total_bilirubin, creatinine, bun`) and the engineered
 `tc_hdl_ratio, tg_hdl_ratio, tyg_index`.
 **Ordinal (1):** `age_band`.
 **One-hot (2):** `sex_1`, `sex_2`.
 
-**Excluded from features:**
+**Not used as features:**
 
-| Excluded | Reason |
+| Columns | Reason |
 |---|---|
-| `diq_*`, `bpq_*`, `mcq_*`, `statin_or_metformin` | label-only — leakage control |
-| `psu`, `strata`, `wtmec`, `cycle` | survey design / provenance |
-| `vitamin_d` | structurally missing for a whole cycle |
-| `wbc`, `platelets`, `sodium`, `potassium`, `chloride`, `calcium` | flag-only markers — reported and escalated by the rule engine, never modelled or advised on |
-| `eth_code`, `pir`, `educ_code` | not on a blood report, not lifestyle-actionable |
+| `diq_*`, `bpq_*`, `mcq_*`, `statin_or_metformin` | label only, to avoid leakage |
+| `psu`, `strata`, `wtmec`, `cycle` | survey design and bookkeeping |
+| `vitamin_d` | missing for a whole cycle |
+| `wbc`, `platelets`, `sodium`, `potassium`, `chloride`, `calcium` | flag-only markers: reported and escalated by the rule engine, never modelled or advised on |
+| `eth_code`, `pir`, `educ_code` | not on a blood report, and lifestyle can't change them |
 
-This list is the authoritative one: it matches `feature_names` in
-`src/app/ml/registry/rf_model_metadata.json`, which the trained model carries.
+This list matches `feature_names` in `src/app/ml/registry/rf_model_metadata.json`
+and the header of `data/processed/X_train.csv`.
 
 ---
 
-## 7. Module map (`src/data_prep/`)
+## 7. Modules (`src/data_prep/`)
 
-| Module | Responsibility (single) |
+| Module | What it does |
 |---|---|
-| `config.py` | Paths, canonical variable map, feature/label column contract, YAML loaders |
-| `download.py` | Fetch `.XPT` for all cycles (idempotent, per-cycle naming) |
-| `load.py` | Read `.XPT` → pandas, canonical rename, weight harmonisation |
-| `merge.py` | Join components on SEQN per cycle, concat cycles, RXQ statin/metformin flag |
-| `labeling.py` | Three-layer target construction + novelty tracking |
-| `outliers.py` | Plausibility → NaN; train-fit winsorisation |
-| `missing.py` | Hybrid drop + train-fit imputation |
-| `features.py` | Clinically-motivated engineered features |
-| `encode_scale.py` | One-hot + ordinal encoding; train-fit scaler; column alignment |
-| `pipeline.py` | Orchestrates all stages in leakage-safe order; persists artifacts |
-| `scripts/run_data_prep.py` | CLI entrypoint (`--download`, `--impute`, …) |
+| `config.py` | Paths, NHANES variable names, which columns are features and which are label only, YAML loading |
+| `download.py` | Downloads the `.XPT` files for every cycle, skipping ones already there |
+| `load.py` | Reads `.XPT` files into pandas, renames columns, unifies the weight column |
+| `merge.py` | Joins components on SEQN within each cycle, stacks the cycles, adds the statin/metformin flag |
+| `labeling.py` | Builds the three-layer label and marks Layer 2 upgrades |
+| `outliers.py` | Implausible values to NaN; winsorising fitted on train |
+| `missing.py` | Drops rows missing mandatory markers; imputation fitted on train |
+| `features.py` | Engineered features |
+| `encode_scale.py` | Encoding, feature matrix, scaler fitted on train |
+| `pipeline.py` | Runs every step in order and saves the outputs |
+| `scripts/run_data_prep.py` | Command-line entry point (`--download`, `--impute`, …) |
 
 ---
 
-## 8. How to run
+## 8. Running it
 
 ```bash
 pip install -r requirements.txt
-python -m scripts.run_data_prep --download     # first run: pulls XPT then builds
-python -m scripts.run_data_prep                # subsequent runs use cached XPT
+python -m scripts.run_data_prep --download     # first run: downloads the XPT files, then builds
+python -m scripts.run_data_prep                # later runs reuse the downloaded files
 ```
 
-Outputs in `data/processed/`: `train.csv`, `test.csv`, `X_train*.csv`,
-`X_test*.csv`, `y_*.csv`, and `artifacts/` (fitted imputer, scaler, winsor
-bounds, feature names, and a `prep_summary.json` methods report).
+Outputs go to `data/processed/`: `train.csv`, `test.csv`, `X_train*.csv`,
+`X_test*.csv`, `y_*.csv`, and `artifacts/` (the fitted imputer and scaler,
+winsorising bounds, feature names and `prep_summary.json`).
 
 ---
 
-## 9. Verification & real-run results
+## 9. Results
 
-`py_compile` passes for all modules. A synthetic smoke test drives
-labelling → outliers → missing → features → encoding and asserts: (a) train/test
-columns identical, (b) no residual NaNs in features, (c) **no label-only column
-present in the feature matrix** (leakage guard), (d) Layer-2 upgrades are counted.
-All pass.
+During development, a synthetic test of labelling, outliers, missing values,
+features and encoding confirmed that train and test have the same columns, no
+NaNs remain in the features, no label-only column is in the feature matrix, and
+Layer 2 upgrades are counted.
 
-**Real NHANES run (all 36 files downloaded as validated XPORT):**
+**Full NHANES run (all 36 files downloaded and checked as valid XPORT):**
 
-| Stage | Rows |
+| Step | Rows |
 |---|---|
-| Merged (2013-14 + 2015-16 + 2017-20) | 35,706 |
-| After adult filter (age ≥ 18) | 21,798 |
-| After dropping rows missing a mandatory **blood** analyte | 19,308 |
-| Train / Test split (stratified, 80/20) | 15,446 / 3,862 |
-| Features | 35 (actionable blood + demographics + engineered; flag-only & Vit-D excluded) |
+| Merged (2013-14, 2015-16, 2017-20) | 35,706 |
+| Adults only (18 and over) | 21,798 |
+| After dropping rows missing a mandatory blood marker | 19,308 |
+| Train / test (stratified 80/20) | 15,446 / 3,862 |
+| Feature columns | 27 |
 
-- **Label distribution (adult cohort, blood-only, weighted-core):** borderline 11,416 · serious 6,855 · normal 3,527.
-- **Post-drop class balance (train):** borderline 8,372 · serious 5,245 · normal 1,829 (~11.8%).
-- **Removing BP/BMI/waist substantially improved the study** (not just scope): (a) `normal`
-  grew 2.9% → **11.8%**, largely resolving the imbalance; (b) `serious` nearly halved
-  (12,898 → 6,855) — confirming blood pressure had been *dominating* the "serious" label,
-  which had quietly undermined the blood-biomarker thesis; (c) the **Layer-2 novelty slice
-  more than doubled (5.1% → 11.9%)** — with BP no longer flagging everyone, far more records
-  have normal-looking bloods but a hidden diagnosis/medication signal, which is exactly the
-  combinatorial "hidden risk" the Random Forest exists to catch.
-- **Documented limitation:** obesity & hypertension are not assessed; the system signposts
-  weight/BP to the GP.
-- **Blood-report scope fix:** requiring only the 3 mandatory *blood* analytes (not BP/BMI/waist)
-  cut the missing-data drop from 4,400 → 2,490 and grew the retained sample ~11%.
-- **Layer-2 novelty slice:** 1,164 records (**5.3%**) upgraded by diagnosis/medication
-  evidence beyond what biomarker thresholds alone flag — the RF's target value-add.
-- **BP harmonisation:** 9,397 manual + 6,706 oscillometric readings reconciled.
-- The adult filter cut the missing-mandatory drop rate from 44% → 20%, confirming
-  most excluded rows were minors lacking adult labs (a validity gain, not just N loss).
+- **Labels for all 21,798 adults:** borderline 11,416, serious 6,855, normal 3,527.
+  Layer 1 on its own gives borderline 10,923, serious 5,659, normal 5,216.
+- **Training set:** borderline 8,372, serious 5,245, normal 1,829 (11.8% normal).
+- **Layer 2 raised the label for 2,587 adults (11.9%).** These records form the
+  novelty slice evaluated in Phase 4.
+- **Removing blood pressure, BMI and waist changed the labels a lot.** The normal
+  share rose from 2.9% to 11.8%, which mostly fixed the class imbalance. Serious
+  labels nearly halved (12,898 → 6,855), so blood pressure had been behind most
+  of them, which didn't fit a study about blood biomarkers. The share of records
+  raised by Layer 2 went up from 5.1% to 11.9%, because far more people now have
+  normal-looking bloods alongside a diagnosis or medication.
+- **Needing only the three mandatory blood markers** cut the rows dropped for
+  missing data from 4,400 to 2,490, keeping about 11% more of the sample.
+- **Limitation:** obesity and high blood pressure aren't assessed; the app refers
+  weight and blood pressure to the GP.
 
-Download robustness: the CDC migrated its URL scheme to
-`…/Public/{startyear}/DataFiles/{FILE}.XPT` and serves an HTTP-200 HTML page for
-missing files. The downloader now validates the XPORT magic header on every file
-and rejects soft-404 HTML, so silent corruption cannot recur.
+The CDC changed its download URLs to `…/Public/{startyear}/DataFiles/{FILE}.XPT`,
+and it returns an HTML page with status 200 for files that don't exist. The
+downloader therefore checks the XPORT header of every file and rejects HTML
+pages, so a broken download can't slip through unnoticed.
 
 ---
 
-## 10. Known limitations to note in the dissertation
+## 10. Limitations
 
-1. **Class balance.** With single-serious-biomarker → Serious, the population
-   skews toward Borderline/Serious (high cardiometabolic prevalence in NHANES).
-   Phase 4 will apply class weighting / resampling and report macro-F1 & PR-AUC,
-   not accuracy.
-2. **US population, UK thresholds.** The RF learns risk *patterns* from US data;
-   clinical *labels/cut-offs* are UK-guideline-anchored. The RF is never used
-   diagnostically — the rule engine owns thresholds at inference.
-3. **Survey weights not used in training.** Weights are retained as columns for
-   transparency; weighted ML is out of scope for the RF and documented as such.
-4. **BP methodology.** Harmonised by averaging with a method flag rather than an
-   unvalidated numeric correction.
-
-**Phase 2 exit criteria met — ready for Phase 3 (Clinical Rule Engine) on approval.**
+1. **Class balance.** Most records are borderline or serious, because
+   cardiometabolic problems are common in NHANES. Phase 4 uses balanced class
+   weights and reports macro-F1 as well as accuracy.
+2. **US data, UK thresholds.** The model learns patterns from US data while the
+   thresholds come from UK guidelines. The model is never used to diagnose, and
+   the rule engine owns the thresholds in the app.
+3. **Survey weights aren't used in training.** They're kept as columns, but
+   weighted training is out of scope for this model.

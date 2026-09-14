@@ -1,14 +1,7 @@
-"""
-providers.py — ILLMProvider adapters.
+"""LLM providers for Ollama, Anthropic and OpenRouter, plus a fake one for tests.
 
-LangChain lives HERE and nowhere else in the domain. Each real adapter wraps a
-LangChain chat model and exposes the plain `complete()` port. Heavy SDKs are
-imported lazily inside the constructor so that importing this module (e.g. for
-the FakeProvider in tests) never requires langchain or a running model.
-
-    OllamaProvider     — local, offline, reproducible default (LangChain ChatOllama)
-    AnthropicProvider  — hosted Claude via LangChain ChatAnthropic
-    FakeProvider       — pure-Python canned responses for offline unit tests
+The real providers wrap LangChain chat models. LangChain is imported inside each
+constructor, so this module can be imported without it installed.
 """
 from __future__ import annotations
 
@@ -20,18 +13,16 @@ log = logging.getLogger(__name__)
 
 
 class OllamaProvider:
-    """Local LLM via LangChain's ChatOllama. Requires a running Ollama daemon
-    and a pulled model (`ollama pull llama3.1`)."""
+    """A local model through Ollama. Needs the Ollama server running and the model pulled."""
 
     def __init__(self, model: str = C.OLLAMA_MODEL, temperature: float = C.TEMPERATURE) -> None:
         import os
         self.name = f"ollama:{model}"
         try:
-            from langchain_ollama import ChatOllama  # preferred package
-        except ImportError:  # pragma: no cover - fallback for older installs
+            from langchain_ollama import ChatOllama
+        except ImportError:  # pragma: no cover
             from langchain_community.chat_models import ChatOllama  # type: ignore
-        # OLLAMA_BASE_URL lets the container reach an Ollama host (e.g. in Docker,
-        # http://host.docker.internal:11434); defaults to the local daemon.
+        # Set OLLAMA_BASE_URL to use an Ollama server other than the local one.
         base = os.getenv("OLLAMA_BASE_URL")
         extra = {"base_url": base} if base else {}
         self._chat = ChatOllama(model=model, temperature=temperature, **extra)
@@ -43,7 +34,7 @@ class OllamaProvider:
 
 
 class AnthropicProvider:
-    """Hosted Claude via LangChain's ChatAnthropic. Needs ANTHROPIC_API_KEY."""
+    """Claude through the Anthropic API. Needs ANTHROPIC_API_KEY."""
 
     def __init__(self, model: str = C.ANTHROPIC_MODEL, temperature: float = C.TEMPERATURE) -> None:
         self.name = f"anthropic:{model}"
@@ -59,9 +50,7 @@ class AnthropicProvider:
 
 
 class OpenRouterProvider:
-    """OpenRouter via LangChain's ChatOpenAI (OpenRouter is OpenAI-compatible).
-    Needs OPENROUTER_API_KEY. Use any OpenRouter model slug (free-tier slugs end
-    in ':free', e.g. 'meta-llama/llama-3.3-70b-instruct:free')."""
+    """Any OpenRouter model, through its OpenAI-compatible API. Needs OPENROUTER_API_KEY."""
 
     def __init__(self, model: str = C.OPENROUTER_MODEL, temperature: float = C.TEMPERATURE) -> None:
         import os
@@ -73,7 +62,7 @@ class OpenRouterProvider:
         self._chat = ChatOpenAI(
             model=model, api_key=api_key, base_url=C.OPENROUTER_BASE_URL,
             temperature=temperature, max_tokens=C.MAX_TOKENS,
-            extra_body={"reasoning": C.OPENROUTER_REASONING,},
+            extra_body={"reasoning": C.OPENROUTER_REASONING},
         )
 
     def complete(self, system: str, user: str) -> str:
@@ -83,20 +72,18 @@ class OpenRouterProvider:
 
 
 class FakeProvider:
-    """Deterministic canned provider for offline tests / demos (no LangChain, no
-    network). Returns whatever JSON string it is constructed with, so a test can
-    exercise the full parse -> guard -> render pipeline without a real model."""
+    """Always returns the response it was created with. Used in tests."""
 
     def __init__(self, response: str, name: str = "fake") -> None:
         self.name = name
         self._response = response
 
-    def complete(self, system: str, user: str) -> str:  # noqa: D401
+    def complete(self, system: str, user: str) -> str:
         return self._response
 
 
 def build_provider(kind: str = C.DEFAULT_PROVIDER, **kwargs):
-    """Factory: return a configured provider by name ('ollama'|'anthropic'|'openrouter')."""
+    """Create a provider by name: "ollama", "anthropic" or "openrouter"."""
     kind = (kind or C.DEFAULT_PROVIDER).lower()
     if kind == "ollama":
         return OllamaProvider(**kwargs)

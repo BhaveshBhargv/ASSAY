@@ -1,4 +1,4 @@
-"""model_repository.py — owns the Random Forest (via RiskAdapter) + its metadata."""
+"""Loads the Random Forest and its metadata."""
 from __future__ import annotations
 
 import json
@@ -18,7 +18,7 @@ class ModelRepository:
             from app.recommend.engine import RiskAdapter
             self._adapter = RiskAdapter()
             log.info("random forest loaded")
-        except Exception as exc:  # noqa: BLE001 - model optional; degrade to rules-only
+        except Exception as exc:  # noqa: BLE001
             log.warning("random forest unavailable (%s); predictions will be rules-only", exc)
 
         meta_path = _REGISTRY / "rf_model_metadata.json"
@@ -37,7 +37,7 @@ class ModelRepository:
         return self._adapter
 
     def predict(self, demographics: dict, biomarkers: dict):
-        """Returns the RF output dict, or None when the model is unavailable."""
+        """The model's output, or None if the model isn't available."""
         if self._adapter is None:
             return None
         return self._adapter.predict(demographics, biomarkers)

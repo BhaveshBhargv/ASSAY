@@ -1,9 +1,4 @@
-"""
-config.py — application settings.
-
-Plain, dependency-light settings with environment overrides (prefix ASSAY_). Kept
-out of the request path so it can be imported anywhere without side effects.
-"""
+"""API settings, read from ASSAY_* environment variables."""
 from __future__ import annotations
 
 import os
@@ -25,7 +20,6 @@ def _env_int(key: str, default: int) -> int:
 class Settings:
     app_name: str = "Assay API"
     version: str = "1.0.0"
-    # Blood report → evidence-based lifestyle guidance (rules + RF + RAG + LLM).
     description: str = (
         "Backend for the blood-test lifestyle recommender. Turns a blood panel into "
         "a clinical-rules + machine-learning risk assessment, retrieves NICE/NHS/WHO "
@@ -36,7 +30,7 @@ class Settings:
     default_k: int = field(default_factory=lambda: _env_int("RETRIEVE_K", 6))
     max_upload_bytes: int = field(default_factory=lambda: _env_int("MAX_UPLOAD_BYTES", 10 * 1024 * 1024))
     log_level: str = field(default_factory=lambda: _env("LOG_LEVEL", "INFO"))
-    # Comma-separated allowed CORS origins (the Streamlit app by default).
+    # Comma-separated; defaults to the ports the Streamlit app runs on.
     cors_origins: tuple[str, ...] = field(
         default_factory=lambda: tuple(
             o.strip() for o in _env("CORS_ORIGINS",

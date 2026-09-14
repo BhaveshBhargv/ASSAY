@@ -1,4 +1,4 @@
-"""model_info.py — GET /model-info response (capabilities & provenance)."""
+"""Response model for GET /model-info."""
 from __future__ import annotations
 
 from typing import Optional

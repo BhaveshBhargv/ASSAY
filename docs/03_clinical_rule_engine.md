@@ -1,48 +1,49 @@
-# Phase 3 — Clinical Rule Engine
+# Phase 3: Clinical rule engine
 
-**Author:** Bhavesh Bhargava — MSc Advanced Data Science
-**Status:** Implemented (`src/app/`), 19/19 unit tests passing.
-**Guideline basis:** NICE (NG28, NG136, CG181, NG49, NG203), NHS, WHO, NCEP ATP III, IDF, standard clinical reference ranges.
-**Panel:** 27 blood biomarkers — 21 actionable (drive label + recommendations), 6 flag-only.
-BP/BMI/waist are **out of scope** (not blood tests; unavailable from a report at inference).
+**Author:** Bhavesh Bhargava, MSc Advanced Data Science
+**Code:** `src/app/domain/` and `src/app/rules/`, 19 unit tests
+**Guidelines:** NICE, NHS, WHO, NCEP ATP III and standard clinical reference ranges (each band names its source in the YAML)
+**Panel:** 27 blood biomarkers: 21 actionable (used for the label and recommendations) and 6 flag-only.
+Blood pressure, BMI and waist aren't included.
 
-> Deterministic path of the five-stage contract: **Rules → RFC → Fusion → RAG → LLM**.
-> The engine holds *no* clinical constants in code — every threshold, status,
-> interpretation and citation lives in `config/clinical_rules.yaml`.
+The rule engine is the deterministic part of the pipeline. There are no clinical
+numbers in the code: every threshold, status, interpretation and citation is in
+`config/clinical_rules.yaml`.
 
 ---
 
-## 1. Approved design decisions
+## 1. Design decisions
 
-| Decision | Choice | Rationale |
+| Decision | Choice | Reason |
 |---|---|---|
-| **Severity model** | Per-biomarker `status ∈ {normal, low, high, borderline, severe}` (your 5 categories), orthogonal to a fusion `severity ∈ {normal, borderline, serious}` and an `urgent` flag | `low`/`high` capture *direction*; `borderline`/`severe` capture *magnitude*. Keeping status and fusion-severity separate lets a marker be clinically "high" yet only a borderline risk contributor (e.g. waist). |
-| **Config source** | **Unified** — one `clinical_rules.yaml` drives both the engine and Phase-2 Layer-1 labelling | Rules and training labels can never drift (SOLID single source of truth). Verified by re-running data prep. |
-| **Severe handling** | Any `severe` band raises `summary.urgent_referral = true` | Safety-dominant escalation (Phase 1). Configurable per band via `urgent:`. |
-| **Extensibility** | New biomarker = new YAML block, **zero Python changes** | Open/Closed principle. |
+| **Severity model** | Each biomarker gets a `status` (normal, low, high, borderline, severe), a separate `severity` used for the overall result (normal, borderline, serious), and an `urgent` flag | `low`/`high` say which way a result is off, and `borderline`/`severe` say by how much. Keeping status and severity separate means a result can be clinically high but only count as borderline overall, e.g. potassium at 5.4 mmol/L. |
+| **One config file** | `clinical_rules.yaml` is used by the engine and by the Layer 1 training labels | The app and the training labels can't disagree. Checked by re-running data preparation. |
+| **Urgent results** | Any band marked urgent (by default every `severe` band) sets `summary.urgent_referral = true` | Serious results are always escalated. Can be changed per band with `urgent:`. |
+| **Adding biomarkers** | A new YAML block, with no Python changes | |
 
 ---
 
-## 2. The five statuses (per biomarker)
+## 2. Statuses
 
 | Status | Meaning | Example |
 |---|---|---|
-| `normal` | within reference range | HbA1c 5.2% |
-| `borderline` | mild deviation, either direction | HbA1c 6.0% (pre-diabetes); SBP 130 |
-| `low` | below range (clinically low) | HDL < sex threshold; SBP < 90 |
-| `high` | above range (clinically high) | LDL 165; HbA1c 7.1% |
-| `severe` | markedly abnormal → urgent | SBP ≥ 180; triglycerides ≥ 500; HbA1c ≥ 9 |
+| `normal` | inside the reference range | HbA1c 5.2% |
+| `borderline` | slightly outside the range, in either direction | HbA1c 6.0% (prediabetes) |
+| `low` | below the range | HDL 45 mg/dL in a woman; fasting glucose 60 mg/dL |
+| `high` | above the range | HbA1c 7.1%; potassium 5.4 mmol/L |
+| `severe` | far outside the range, needs prompt attention | HbA1c 10.5%; potassium 6.0 mmol/L or more |
 
-Each maps to a fusion `severity` and an `urgent` flag **per band in config**, so the
-clinical meaning is fully data-driven and auditable.
+The severity and urgent flag for each status are set **per band in the config**,
+so the clinical meaning comes from the data and can be checked there.
 
 ---
 
 ## 3. How the config works (`clinical_rules.yaml`)
 
-Each biomarker declares ordered `bands`. A value falls in the first band whose
-`[min, max)` contains it (min inclusive, max exclusive; omit for ±∞). `min`/`max`
-may be a scalar **or** a sex map `{male, female}` — resolved at evaluation time.
+Each biomarker has an ordered list of `bands`. A value goes in the first band
+where `min <= value < max`; leave out `min` or `max` for an open end. Either can
+be a number **or** a per-sex map `{male, female}`, resolved when the value is
+evaluated.
 
 ```yaml
 hdl_mgdl:
@@ -57,75 +58,83 @@ hdl_mgdl:
     - {status: normal, min: {male: 40, female: 50}, severity: normal, direction: in_range, ...}
 ```
 
-**Load-time validation (fail fast):** scalar bands must be ascending, gap-free, and
-cover the whole number line; unknown status/severity values are rejected. A
-misconfigured YAML fails at startup, not silently at inference.
+**Checked when loading.** Numeric bands must be in ascending order with no gaps
+and cover every possible value, and unknown statuses or severities are rejected.
+A mistake in the YAML stops the app at startup instead of giving wrong results
+later.
 
-**Biomarkers covered (27, blood-only panel).** Each carries `category` (always
-`blood`), `tier`, and `label_role`:
-- **Panels:** cardiometabolic (HbA1c, glucose, lipids), CBC (Hb, Hct, RBC, MCV,
-  MCH, MCHC, RDW, WBC, platelets), liver (ALT, AST, ALP, albumin, bilirubin),
-  kidney (creatinine, BUN), electrolytes (Na, K, Cl, Ca), Vitamin D.
-- **Out of scope:** blood pressure, BMI, waist — not blood tests, and unavailable
-  from a blood report at inference. Weight & BP are signposted to the GP instead.
-- **`tier`** = `actionable` (21 markers → drive recommendations + label) vs
-  `flag_only` (6: electrolytes, WBC, platelets → reported + escalated, but NEVER
-  turned into lifestyle advice; routed to a clinician signpost instead).
-- **`label_role`** = `core` vs `secondary` (see §3b). Unit tests lock the
-  category/tier/aggregation behaviour.
+**The 27 biomarkers.** Every result includes `category` (always `blood`), `tier`
+and `label_role`:
+- **Panels:** cardiometabolic (HbA1c, glucose, lipids), full blood count (Hb, Hct,
+  RBC, MCV, MCH, MCHC, RDW, WBC, platelets), liver (ALT, AST, ALP, albumin,
+  bilirubin), kidney (creatinine, BUN), electrolytes (Na, K, Cl, Ca) and vitamin D.
+- **Not included:** blood pressure, BMI and waist, because they aren't blood tests
+  and wouldn't be on a blood report. Weight and blood pressure are left to the GP.
+- **`tier`** is `actionable` for 21 markers, which drive the recommendations and
+  the label, and `flag_only` for 6 (electrolytes, WBC, platelets), which are
+  reported and escalated but never turned into lifestyle advice. Those go to a
+  "discuss with your clinician" signpost instead.
+- **`label_role`** is `core` for the cardiometabolic markers, `secondary` for the
+  markers listed in `meta.label_secondary_markers` (blood count, liver, kidney,
+  vitamin D), and `none` for flag-only markers. See §3b.
 
-### 3b. Weighted-core label aggregation
+### 3b. Overall severity
 
-With 25 actionable markers, a naive "any borderline → borderline" rule made the
-`normal` class vanish (a lone raised RDW or Vitamin-D insufficiency flagged
-everyone). The aggregation policy (config `meta`, so it's tunable) is:
+With this many actionable markers, a simple "any borderline marker makes the
+record borderline" rule left almost no normal records, because a single slightly
+raised RDW or a low vitamin D was enough. The rule used instead (set in `meta`, so
+it can be tuned) is:
 
-- any actionable **serious** marker → **serious**;
-- a **core** marker (cardiometabolic + measurements) at borderline → **borderline**;
-- **secondary** markers (CBC/liver/kidney/Vit-D) → borderline only when
-  `>= secondary_borderline_min` (default 2) are mildly abnormal;
-- else **normal**.
+- any actionable **serious** marker → **serious**
+- a **core** marker at borderline → **borderline**
+- **secondary** markers → borderline only when at least
+  `secondary_borderline_min` (2) of them are borderline
+- otherwise **normal**
 
-`RuleEngineResult.overall_severity` and the Phase-2 Layer-1 label call this **one**
-policy, so training labels and inference severity cannot drift. Flag-only markers
-never affect the graded label — they only raise `urgent_referral`.
+`RuleEngineResult.overall_severity` and the Layer 1 training label both use this
+same rule, so they can't drift apart. Flag-only markers don't affect the overall
+severity; they can only set `urgent_referral`.
 
 ---
 
-## 4. Architecture (Clean / SOLID)
+## 4. Structure
 
 ```
-config/clinical_rules.yaml         ← all clinical knowledge (data)
-        │  load + validate
+config/clinical_rules.yaml               ← all the clinical content
+        │  loaded and validated by
         ▼
-src/app/rules/loader.py            → RuleSet
-        │  injected into
+src/app/rules/loader.py                  → RuleSet
+        │  passed into
         ▼
-src/app/domain/services/rule_engine.py   (domain service; no I/O, no constants)
+src/app/domain/services/rule_engine.py   (no file access, no hard-coded values)
         │  uses
         ▼
-src/app/domain/models.py + enums.py       (pure entities/value objects)
+src/app/domain/models.py + enums.py      (plain data classes and enums)
 ```
 
-- **Dependency Inversion:** the engine depends on the `RuleSet` abstraction; the
-  YAML/loader is injected. Swap the config, swap the clinical policy.
-- **Single Responsibility:** the engine *only* classifies. It does not fuse, retrieve,
-  or explain.
-- **No leakage of frameworks into the domain:** `domain/` imports nothing external.
+- The engine only depends on the `RuleSet` it's given, so a different config
+  file means a different clinical policy with no code change.
+- The engine only classifies. Fusion, retrieval and explanations happen
+  elsewhere.
+- `domain/` has no external imports.
 
 ---
 
-## 5. Standardized JSON output
+## 5. JSON output
 
-`engine.evaluate(readings, context).to_dict()`:
+`engine.evaluate(readings, context).to_dict()`. This is the output of
+`scripts/run_rule_engine.py` for its sample panel, with one of the eleven
+biomarkers shown:
 
 ```json
 {
-  "ruleset_version": "1.0",
+  "ruleset_version": "1.1",
   "context": {"age": 54, "sex": "male"},
   "biomarkers": [
     {
-      "code": "hba1c_pct", "name": "HbA1c", "value": 6.8, "unit": "%",
+      "code": "hba1c_pct", "name": "HbA1c", "category": "blood",
+      "tier": "actionable", "label_role": "core",
+      "value": 6.8, "unit": "%",
       "status": "high", "direction": "high", "severity": "serious", "urgent": false,
       "reference_range": {"low": 4.0, "high": 5.6},
       "interpretation": "HbA1c 6.8% is in the diabetes range (>=6.5%).",
@@ -134,61 +143,67 @@ src/app/domain/models.py + enums.py       (pure entities/value objects)
   ],
   "summary": {
     "overall_severity": "serious",
-    "urgent_referral": true,
-    "flagged": ["hba1c_pct", "hdl_mgdl", "alt", "..."],
-    "recommendation_targets": ["hba1c_pct", "hdl_mgdl", "alt"],
+    "urgent_referral": false,
+    "flagged": ["hba1c_pct", "fasting_glucose_mgdl", "total_chol_mgdl", "hdl_mgdl",
+                "ldl_mgdl", "triglycerides_mgdl", "alt", "hemoglobin", "vitamin_d",
+                "potassium"],
+    "recommendation_targets": ["hba1c_pct", "fasting_glucose_mgdl", "total_chol_mgdl",
+                               "hdl_mgdl", "ldl_mgdl", "triglycerides_mgdl", "alt",
+                               "hemoglobin", "vitamin_d"],
     "clinician_signpost": ["potassium"],
-    "status_counts": {"high": 4, "borderline": 4, "low": 1, "severe": 1},
+    "status_counts": {"high": 3, "borderline": 5, "low": 2, "normal": 1},
     "unknown_codes": []
   }
 }
 ```
 
-`overall_severity` is the safety-dominant max across biomarkers — **this is the value
-the Fusion stage (Phase 3→Stage 3 of the contract) consumes**, together with
-`urgent_referral`.
+`overall_severity` (worked out as in §3b) and `urgent_referral` are what the
+fusion step uses.
 
 ---
 
-## 6. Module map (`src/app/`)
+## 6. Modules
 
-| File | Responsibility |
+| File | What it does |
 |---|---|
-| `domain/enums.py` | `Status`, `Severity`, `Direction`, severity ranking + `max_severity` |
-| `domain/models.py` | `Band`, `BiomarkerRule`, `RuleSet`, `BiomarkerResult`, `RuleEngineResult`, sex-specific threshold resolution |
+| `domain/enums.py` | `Status`, `Severity`, `Direction`, severity ranking and `max_severity` |
+| `domain/models.py` | `Band`, `BiomarkerRule`, `RuleSet`, `BiomarkerResult`, `RuleEngineResult`, resolving per-sex thresholds |
 | `domain/services/rule_engine.py` | The engine: `classify`, `evaluate`, `layer1_severity` |
-| `rules/loader.py` | Parse + validate `clinical_rules.yaml` → `RuleSet` |
-| `scripts/run_rule_engine.py` | CLI/demo emitting the standardized JSON |
-| `tests/test_rule_engine.py` | 12 unit tests |
+| `rules/loader.py` | Reads and validates `clinical_rules.yaml` into a `RuleSet` |
+| `scripts/run_rule_engine.py` | Command-line demo that prints the JSON output |
+| `tests/test_rule_engine.py` | 19 unit tests |
 
 ---
 
-## 7. Unification result (rules ↔ training labels)
+## 7. Using the engine for the training labels
 
-Phase-2 Layer-1 labelling now calls `engine.layer1_severity(...)`. Re-running data
-prep confirmed stability:
+Layer 1 labelling in data preparation calls `engine.layer1_severity(...)`
+instead of its own threshold code. Re-running data preparation when this change
+was made gave:
 
-| Label | Original inline logic | Unified via engine |
+| Label | Previous labelling code | Using the engine |
 |---|---|---|
 | serious | 12,752 | 12,753 |
 | borderline | 7,016 | 7,577 |
 | normal | 2,030 | 1,468 |
 
-`serious` is unchanged; ~560 records moved normal→borderline because the engine adds
-clinically legitimate mild flags the old logic lacked (hypotension, hypoglycaemia,
-increased-risk waist tier). This is a correctness gain, and rules/labels are now one
-definition.
+These counts are from before blood pressure, BMI and waist were removed, so they
+don't match the current dataset. `serious` stayed the same, and about 560 records
+moved from normal to borderline because the engine includes mild flags the old
+code didn't have (low blood pressure, low glucose, and the increased-risk waist
+band). The rules and the labels have been a single definition since then.
 
 ---
 
 ## 8. Verification
 
-- **12/12 unit tests pass**, covering: config load + contiguity validation, each
-  status band, boundary inclusivity (6.5 → diabetes, 6.49 → pre-diabetes),
-  sex-specific HDL (45 mg/dL: normal for men, low for women), low-direction BP,
-  missing/NaN → `None`, `evaluate` summary aggregation, unknown-code handling, and
-  JSON-serialisability.
-- **Demo** (`run_rule_engine.py`) produces valid standardized JSON; a severe SBP (182)
-  correctly sets `urgent_referral: true`.
-
-**Phase 3 exit criteria met — ready for Phase 4 (Random Forest model) on approval.**
+- **19 unit tests pass.** They cover loading and validating the config, each
+  status band, band boundaries (6.5 is diabetes, 6.49 is prediabetes), per-sex HDL
+  (45 mg/dL is normal for a man and low for a woman), low glucose, missing and NaN
+  values returning `None`, the summary from `evaluate`, unknown codes, JSON
+  output, the panel size (27 markers, 21 actionable), blood pressure, BMI and
+  waist being absent, flag-only markers going to the signpost, an anaemia marker
+  being actionable, and the three overall-severity cases from §3b.
+- **Demo:** `run_rule_engine.py` prints valid JSON. Its sample panel is `serious`
+  overall, with potassium (5.4 mmol/L, flag-only) sent to the clinician signpost
+  and no urgent referral.

@@ -1,1 +1,1 @@
-"""NHANES Phase 2 data-preparation package."""
+"""Builds the training dataset from NHANES."""

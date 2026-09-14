@@ -1,11 +1,6 @@
-"""
-loaders.py — document loaders.
+"""Load guideline passages from the curated YAML file and from any PDFs.
 
-Two sources feed one corpus:
-  * curated YAML  — authored, cited, paraphrased guideline passages (primary)
-  * PDF folder    — real NICE/NHS/WHO PDFs the user drops in (parsed + chunked)
-
-Both yield GuidelineChunk objects with provenance so retrieval stays citable.
+Every passage keeps its source and code so the advice built on it can be cited.
 """
 from __future__ import annotations
 
@@ -35,7 +30,6 @@ def _as_tuple(v) -> tuple[str, ...]:
 
 
 def load_curated_yaml(path: Path) -> list[GuidelineChunk]:
-    """Load the authored corpus: a YAML list of passage entries."""
     with open(path, "r", encoding="utf-8") as fh:
         data = yaml.safe_load(fh) or {}
     entries = data.get("passages", [])
@@ -58,7 +52,6 @@ def load_curated_yaml(path: Path) -> list[GuidelineChunk]:
 
 
 def parse_pdf(path: Path) -> str:
-    """Extract text from a PDF (PDF parser)."""
     from pypdf import PdfReader
     reader = PdfReader(str(path))
     pages = [(pg.extract_text() or "") for pg in reader.pages]
@@ -68,8 +61,11 @@ def parse_pdf(path: Path) -> str:
 def load_pdf_dir(
     pdf_dir: Path, splitter: RecursiveTextSplitter | None = None
 ) -> list[GuidelineChunk]:
-    """Parse + chunk every PDF in a directory. Metadata is inferred from the
-    filename convention '<SOURCE>_<CODE>_<title words>.pdf' (all optional)."""
+    """Split every PDF in a folder into chunks.
+
+    Source, code and title are taken from the filename when it follows
+    SOURCE_CODE_title_words.pdf; any of the parts can be missing.
+    """
     if not pdf_dir.exists():
         return []
     splitter = splitter or RecursiveTextSplitter()

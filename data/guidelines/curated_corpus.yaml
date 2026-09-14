@@ -1,15 +1,12 @@
-# =========================================================================== #
-# Curated guideline corpus — Phase 5 RAG knowledge base
+# Guideline passages for retrieval.
 #
-# Concise, PARAPHRASED summaries of publicly available NICE / NHS / WHO lifestyle
-# guidance relevant to the blood biomarkers this system assesses. These are the
-# author's own short summaries with attribution (source + guideline code) for
-# research use — NOT verbatim reproductions of the source documents. Real source
-# PDFs can additionally be ingested from data/guidelines/pdfs/.
+# Short summaries, in my own words, of public NICE, NHS and WHO lifestyle
+# guidance for the biomarkers the app covers. Each one names its source and
+# guideline code; none are copied from the original documents. PDFs placed in
+# data/guidelines/pdfs/ are indexed as well.
 #
-# Each passage: id, source, code, title, biomarkers (canonical codes),
-# categories, severities (which risk levels it applies to), text.
-# =========================================================================== #
+# Fields: id, source, code, title, biomarkers (codes), categories,
+# severities (the risk levels it applies to), text.
 
 passages:
 

@@ -1,16 +1,8 @@
-"""
-rag_eval.py — retrieval quality (Phase 9).
+"""Retrieval quality for the evaluation report.
 
-Metrics per gold query, averaged:
-  Precision@K  — fraction of the top-K passages that are relevant
-  Recall@K     — fraction of all relevant passages found in the top-K
-  Context relevance — (a) mean cosine score of the top-K (semantic match to the
-                      query) and (b) mean tag-overlap (share of top-K passages
-                      tagged with a queried biomarker)
-
-Relevance is a corpus-tag "silver" standard: a passage is relevant to a query if
-its biomarker tags intersect the query's `relevant_codes`. Reproducible and
-requires no manual annotation (a documented limitation vs. human relevance labels).
+For each test query this computes Precision@K, Recall@K, the mean similarity
+score of the top K and the share of the top K tagged with a queried biomarker.
+Relevance comes from the corpus's own biomarker tags rather than human labels.
 """
 from __future__ import annotations
 

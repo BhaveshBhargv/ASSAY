@@ -1,4 +1,4 @@
-"""model_info_controller.py — GET /model-info."""
+"""GET /model-info"""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends

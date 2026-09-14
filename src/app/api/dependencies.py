@@ -1,10 +1,7 @@
-"""
-dependencies.py — dependency injection wiring.
+"""FastAPI dependencies.
 
-Repositories are process-singletons (heavy artefacts loaded once) via `lru_cache`;
-services are cheap and built per request from those repositories. Controllers
-depend only on the service getters, so nothing in the HTTP layer knows how an
-artefact is loaded. `warm_up()` primes the singletons at startup.
+Repositories load models and indexes, so each one is created once and cached.
+Services are cheap and are built for every request.
 """
 from __future__ import annotations
 
@@ -23,7 +20,7 @@ from .services.retrieval_service import RetrievalService
 from .services.upload_service import UploadService
 
 
-# --- repositories (singletons) -------------------------------------------- #
+# Repositories, created once.
 @lru_cache(maxsize=1)
 def get_rule_repository() -> RuleRepository:
     return RuleRepository()
@@ -44,7 +41,7 @@ def get_llm_repository() -> LLMRepository:
     return LLMRepository()
 
 
-# --- services (per request) ----------------------------------------------- #
+# Services, created per request.
 def get_assessment_service(
     rules: RuleRepository = Depends(get_rule_repository),
     models: ModelRepository = Depends(get_model_repository),
@@ -79,7 +76,7 @@ def get_model_info_service(
 
 
 def warm_up() -> None:
-    """Load heavy singletons up front so the first request isn't slow."""
+    """Load the repositories at startup so the first request isn't slow."""
     get_rule_repository()
     get_model_repository()
     get_retrieval_repository()

@@ -1,10 +1,7 @@
-"""
-models.py — domain entities & value objects for the rule engine.
+"""Dataclasses for the rule set and the rule engine's results.
 
-Pure dataclasses, no framework dependencies. `Band` and `BiomarkerRule` model
-the configurable rule set; `BiomarkerResult` and `RuleEngineResult` model the
-standardized output. Thresholds may be scalar or sex-specific (a {male, female}
-map), resolved at evaluation time.
+A threshold is either a single number or a {"male": ..., "female": ...} map,
+resolved against the patient's sex when a value is classified.
 """
 from __future__ import annotations
 
@@ -14,12 +11,10 @@ from typing import Optional, Union
 
 from .enums import Direction, Severity, Status
 
-# A threshold is either a plain number or a per-sex map.
 Threshold = Union[float, dict]
 
 
 def resolve_threshold(value: Optional[Threshold], sex: Optional[str], default: float) -> float:
-    """Resolve a scalar-or-{male,female} threshold for a given sex."""
     if value is None:
         return default
     if isinstance(value, dict):
@@ -37,13 +32,12 @@ class Guideline:
 
 @dataclass(frozen=True)
 class Band:
-    """One threshold band within a biomarker rule."""
     status: Status
     severity: Severity
-    min: Optional[Threshold] = None   # inclusive; None => -inf
-    max: Optional[Threshold] = None   # exclusive; None => +inf
+    min: Optional[Threshold] = None  # inclusive, None means no lower bound
+    max: Optional[Threshold] = None  # exclusive, None means no upper bound
     direction: Direction = Direction.IN_RANGE
-    urgent: Optional[bool] = None     # None => defaults to (status == SEVERE)
+    urgent: Optional[bool] = None  # defaults to status == SEVERE
     guideline: Optional[Guideline] = None
     interpretation: str = ""
 
@@ -62,9 +56,9 @@ class BiomarkerRule:
     name: str
     unit: str
     bands: tuple[Band, ...]
-    category: str = "blood"   # "blood" (from the report) | "measurement" (separate input)
-    tier: str = "actionable"  # "actionable" (drives recommendations + label) | "flag_only"
-    label_role: str = "core"  # "core" | "secondary" | "none" (label aggregation weight)
+    category: str = "blood"
+    tier: str = "actionable"  # or "flag_only"
+    label_role: str = "core"  # "core", "secondary" or "none"
     reference_range_low: Optional[Threshold] = None
     reference_range_high: Optional[Threshold] = None
 
@@ -87,7 +81,7 @@ class RuleSet:
 
 @dataclass(frozen=True)
 class PatientContext:
-    sex: Optional[str] = None          # "male" | "female"
+    sex: Optional[str] = None  # "male" or "female"
     age: Optional[int] = None
 
 
@@ -124,12 +118,11 @@ class RuleEngineResult:
     unknown_codes: list[str] = field(default_factory=list)
     secondary_borderline_min: int = 2
 
-    # --- aggregate summary -------------------------------------------------
     @property
     def overall_severity(self) -> Severity:
-        """Weighted-core policy over the ACTIONABLE panel (flag-only markers
-        affect only urgent_referral, never the graded label — keeping the
-        inference severity identical to the training label definition)."""
+        # Only actionable markers count towards the grade. Flag-only markers can
+        # still trigger an urgent referral, but leaving them out here keeps this
+        # the same as the training label definition.
         actionable = [b for b in self.biomarkers if b.tier == "actionable"]
         if any(b.severity == Severity.SERIOUS for b in actionable):
             return Severity.SERIOUS
@@ -155,13 +148,13 @@ class RuleEngineResult:
 
     @property
     def recommendation_targets(self) -> list[str]:
-        """Actionable abnormal markers → drive lifestyle recommendations (Phase 6)."""
+        """Abnormal actionable markers, which get lifestyle advice."""
         return [b.code for b in self.biomarkers
                 if b.severity != Severity.NORMAL and b.tier == "actionable"]
 
     @property
     def clinician_signpost(self) -> list[str]:
-        """Flag-only abnormal markers → 'discuss with clinician', never lifestyle advice."""
+        """Abnormal flag-only markers, which are referred to a clinician instead."""
         return [b.code for b in self.biomarkers
                 if b.severity != Severity.NORMAL and b.tier == "flag_only"]
 

@@ -1,21 +1,14 @@
-"""
-labeling.py — three-layer target construction (the project's methodological core).
+"""Builds the three-class training label in three layers.
 
-Layer 1  Rule-based single-biomarker labelling — delegated to the SHARED clinical
-         rule engine (`app.domain.services.rule_engine`). Training labels and the
-         inference-time rule engine therefore use ONE clinical definition and can
-         never drift (the Phase-3 unification decision).
-Layer 2  Diagnosis & medication proxy labelling for interaction cases
-         (records no single biomarker flags) using questionnaire data.
-Layer 3  Conflict resolution: final = max(Layer 1, Layer 2). Clinical
-         diagnosis/medication can only ever RAISE severity, never lower it.
+Layer 1  the rule engine applied to the blood results. It's the same engine the
+         app uses, so the training labels and the app can't disagree.
+Layer 2  diagnosis and medication answers from the questionnaires, which catch
+         people whose bloods alone don't look abnormal.
+Layer 3  the final label is the higher of the two.
 
-Leakage guard: the Layer-2 inputs (DIQ/BPQ/MCQ/RXQ) are consumed HERE only and
-are dropped from the feature matrix downstream.
-
-Outputs added to the frame:
-  label_l1  label_l2  label   (strings: normal/borderline/serious)
-  label_upgraded_by_l2        (bool: the novelty slice — L2 > L1)
+The Layer 2 columns are only used here and are removed from the features later.
+The frame gets label_l1, label_l2, label and label_upgraded_by_l2 (True where
+Layer 2 is higher than Layer 1).
 """
 from __future__ import annotations
 
@@ -35,22 +28,17 @@ def default_engine() -> RuleEngine:
 
 
 def _sex_series(df: pd.DataFrame) -> pd.Series:
-    """Map NHANES sex_code (1=male, 2=female) to 'male'/'female'."""
+    """NHANES sex_code (1 = male, 2 = female) as "male"/"female"."""
     return df["sex_code"].map({1: "male", 2: "female"})
 
 
-# --------------------------------------------------------------------------- #
-# Layer 1 — via the shared rule engine
-# --------------------------------------------------------------------------- #
 def layer1_severity(df: pd.DataFrame, engine: RuleEngine) -> pd.Series:
-    """Weighted-core Layer-1 severity over the ACTIONABLE panel (flag-only
-    markers never drive the label):
-        * any actionable serious marker            -> serious
-        * a CORE marker at borderline              -> borderline
-        * SECONDARY markers                        -> borderline only when
-          >= secondary_borderline_min are mildly abnormal
-    Uses the engine's core/secondary split so the training label and the
-    inference-time overall_severity share ONE policy.
+    """Layer 1 severity from the actionable markers.
+
+    Any serious marker makes the row serious. One borderline core marker, or at
+    least secondary_borderline_min borderline secondary markers, makes it
+    borderline. Flag-only markers are ignored. This is the same rule the engine
+    uses for overall_severity.
     """
     sex = _sex_series(df).to_numpy()
     n = len(df)
@@ -81,15 +69,12 @@ def layer1_severity(df: pd.DataFrame, engine: RuleEngine) -> pd.Series:
     return pd.Series(out, index=df.index, name="label_l1_int")
 
 
-# --------------------------------------------------------------------------- #
-# Layer 2 — diagnosis & medication proxies
-# --------------------------------------------------------------------------- #
 def _yes(series: pd.Series, code: int = 1) -> pd.Series:
     return pd.to_numeric(series, errors="coerce") == code
 
 
 def layer2_severity(df: pd.DataFrame, thresholds: dict) -> pd.Series:
-    """Minimum severity enforced by clinical diagnosis / medication evidence."""
+    """Minimum severity implied by diagnoses and medication."""
     n = len(df)
     sev = np.zeros(n, dtype="int8")
 
@@ -121,11 +106,8 @@ def layer2_severity(df: pd.DataFrame, thresholds: dict) -> pd.Series:
     return pd.Series(sev, index=df.index, name="label_l2_int")
 
 
-# --------------------------------------------------------------------------- #
-# Layer 3 — fuse
-# --------------------------------------------------------------------------- #
 def build_labels(df: pd.DataFrame, thresholds: dict, engine: RuleEngine | None = None) -> pd.DataFrame:
-    """Attach label_l1, label_l2, label, and the novelty flag to a copy of df."""
+    """Copy of df with label_l1, label_l2, label and label_upgraded_by_l2 added."""
     engine = engine or default_engine()
     out = df.copy()
     l1 = layer1_severity(out, engine)
@@ -140,7 +122,7 @@ def build_labels(df: pd.DataFrame, thresholds: dict, engine: RuleEngine | None =
 
 
 def label_report(df: pd.DataFrame) -> dict:
-    """Summary counts for the dissertation methods chapter."""
+    """Label counts for the data prep summary."""
     return {
         "label_distribution": df["label"].value_counts().to_dict(),
         "layer1_distribution": df["label_l1"].value_counts().to_dict(),

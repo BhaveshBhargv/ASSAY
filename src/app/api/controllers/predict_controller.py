@@ -1,4 +1,4 @@
-"""predict_controller.py — POST /predict."""
+"""POST /predict"""
 from __future__ import annotations
 
 from fastapi import APIRouter, Depends

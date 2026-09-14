@@ -1,19 +1,14 @@
-# Clinical thresholds & label construction — Phase 2
+# Thresholds used when preparing the NHANES data.
 # Sources: NICE (NG28 diabetes, NG136 hypertension, CG181 lipids), NHS, WHO, NCEP ATP III.
-# Severity ordinal used throughout: normal < borderline < serious
-# NOTE: thresholds live in config (not code) to satisfy the Open/Closed principle —
-#       add a biomarker or change a cut-off here, no engine edits required.
+# Severity order: normal < borderline < serious
 
 label_order: [normal, borderline, serious]
 
-# ---------------------------------------------------------------------------
-# LAYER 1 — single-biomarker thresholds (what a GP reads off a report)
-# Each biomarker maps a value -> normal/borderline/serious.
-# 'direction' controls interpretation:
-#   high_is_bad        : value >= serious.min => serious; borderline band otherwise
-#   low_is_bad_sex     : value < sex-specific low => borderline; < serious_below => serious
-#   high_is_bad_sex    : value > sex-specific high => borderline
-# ---------------------------------------------------------------------------
+# Layer 1: cut-offs for single biomarkers.
+# direction:
+#   high_is_bad      value >= serious.min is serious, the borderline band is borderline
+#   low_is_bad_sex   below the per-sex low is borderline, below serious_below is serious
+#   high_is_bad_sex  above the per-sex high is borderline
 biomarkers:
   hba1c_pct:
     unit: "%"
@@ -85,11 +80,8 @@ biomarkers:
     high_threshold: {male: 102, female: 88}   # above => borderline (central adiposity)
     source: "IDF / WHO"
 
-# ---------------------------------------------------------------------------
-# Physiological plausibility bounds. Values outside -> set to NaN before
-# imputation (implausible = data error, not a real extreme). Winsorisation
-# at 1st/99th percentile is applied afterwards in the outlier step.
-# ---------------------------------------------------------------------------
+# Plausibility bounds. Anything outside these is treated as a data error and set
+# to NaN before imputation. Winsorising to the 1st/99th percentile happens later.
 plausibility:
   hba1c_pct:            {min: 3.0,  max: 20.0}
   fasting_glucose_mgdl: {min: 30,   max: 800}
@@ -122,13 +114,10 @@ plausibility:
   # vitamins
   vitamin_d:            {min: 5,    max: 400}
 
-# ---------------------------------------------------------------------------
-# LAYER 2 — diagnosis & medication proxies for interaction cases
-# (records where NO single biomarker breaches a threshold).
-# Each proxy enforces a MINIMUM severity. These variables are LABEL-ONLY and
-# are excluded from the RF feature matrix to prevent target leakage.
-# NHANES 'yes' coding: 1 = Yes, 2 = No, 3 = Borderline (DIQ010), 7/9 = refused/DK.
-# ---------------------------------------------------------------------------
+# Layer 2: diagnoses and medication that set a minimum severity, which catches
+# people whose bloods alone look fine. These columns only feed the label and are
+# never model features.
+# NHANES answers: 1 = yes, 2 = no, 3 = borderline (DIQ010), 7/9 = refused/don't know.
 diagnosis_proxies:
   diabetes_diagnosis:                     # DIQ010 == 1
     min_severity: borderline
@@ -147,7 +136,7 @@ diagnosis_proxies:
   statin_or_metformin:                    # RXQ_RX drug name match (optional)
     min_severity: borderline
 
-# Mapping of the 3-class label to the Phase 1 severity taxonomy.
+# label -> severity wording
 label_to_severity:
   normal: low
   borderline: moderate

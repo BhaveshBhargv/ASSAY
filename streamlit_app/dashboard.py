@@ -1,17 +1,11 @@
-"""
-dashboard.py — Assay: the Streamlit dashboard.
+"""Streamlit dashboard.
 
-Thin orchestration only: wire the sidebar/form (ui.inputs) to the pipeline
-(services.pipeline) and render results with presentational components
-(ui.components, ui.charts). All heavy lifting lives in the Phase 3-6 engine.
+The assessment (rules, model, charts) is shown straight away, and the LLM
+recommendations are generated in a background thread so a slow model doesn't
+hold up the rest of the page.
 
-Analysis is progressive: the assessment (risk summary, severity table, charts) is
-computed fast and shown immediately, while the LLM recommendations are generated
-in a background thread and streamed into their section when ready — so the LLM's
-latency never blocks the rest of the page.
-
-The entry file is named `dashboard.py` (not `app.py`) so it can't shadow the
-`app` engine package on sys.path.
+The file is called dashboard.py rather than app.py so it doesn't shadow the
+`app` package on sys.path.
 
 Run:  streamlit run streamlit_app/dashboard.py
 """
@@ -30,29 +24,28 @@ import streamlit as st  # noqa: E402
 st.set_page_config(page_title="Assay — Blood Report Insights", page_icon="🩸",
                    layout="wide", initial_sidebar_state="expanded")
 
-# Streamlit Community Cloud provides secrets via st.secrets (not env vars). Bridge
-# them into the environment so the os.getenv-based LLM providers pick them up.
-# Runs before importing the engine config so model/key overrides take effect.
+# The LLM providers read their keys from os.environ, so copy any st.secrets over.
+# This has to run before the engine config is imported.
 import os  # noqa: E402
 try:
     for _k in ("OPENROUTER_API_KEY", "ASSAY_OPENROUTER_MODEL",
                "ANTHROPIC_API_KEY", "OLLAMA_BASE_URL"):
         if _k in st.secrets and not os.environ.get(_k):
             os.environ[_k] = str(st.secrets[_k])
-except Exception:  # no secrets configured locally — that's fine
+except Exception:  # no secrets file
     pass
 
-from app.recommend.config import DISCLAIMER          # noqa: E402
-from services import pipeline                          # noqa: E402
-from services.report_pdf import build_pdf             # noqa: E402
-from ui import components as C                          # noqa: E402
+from app.recommend.config import DISCLAIMER  # noqa: E402
+from services import pipeline  # noqa: E402
+from services.report_pdf import build_pdf  # noqa: E402
+from ui import components as C  # noqa: E402
 from ui.charts import deviation_chart, rf_probability_chart  # noqa: E402
-from ui.inputs import (                                 # noqa: E402
+from ui.inputs import (  # noqa: E402
     Settings, collect_biomarkers, init_state, render_biomarker_form, render_sidebar,
 )
-from ui.theme import inject                             # noqa: E402
+from ui.theme import inject  # noqa: E402
 
-# Plotly: hide the hover toolbar/logo for a clean chart (tooltips kept).
+# hide the Plotly toolbar
 _PLOTLY_CONFIG = {"displayModeBar": False, "displaylogo": False}
 
 inject()
@@ -62,7 +55,7 @@ settings = render_sidebar()
 
 @st.cache_resource
 def _executor() -> ThreadPoolExecutor:
-    """One background worker pool for the whole app (LLM generation runs here)."""
+    """Thread pool for LLM generation, shared across sessions."""
     return ThreadPoolExecutor(max_workers=2)
 
 
@@ -70,7 +63,7 @@ def _md(html: str) -> None:
     st.markdown(html, unsafe_allow_html=True)
 
 
-# --- header ---------------------------------------------------------------- #
+# header
 _md('<div class="eyebrow">Clinical lifestyle dashboard</div>')
 st.markdown("# Blood report insights")
 _md('<div class="section-note">A blood panel, read against NICE / NHS / WHO '
@@ -79,7 +72,7 @@ _md('<div class="section-note">A blood panel, read against NICE / NHS / WHO '
 for note in st.session_state.get("parse_notes", []):
     st.info(note)
 
-# --- input form ------------------------------------------------------------ #
+# input form
 have_results = st.session_state.get("assessment") is not None
 with st.expander("Blood panel & values", expanded=True):
     render_biomarker_form()
@@ -87,13 +80,9 @@ with st.expander("Blood panel & values", expanded=True):
 left, right = st.columns([5, 1])
 
 with right:
-    settings.analyze = st.button(
-        "Analyze",
-        type="primary",
-        use_container_width=True,
-    )
+    settings.analyze = st.button("Analyze", type="primary", use_container_width=True)
 
-# --- run: fast assessment now, LLM in the background ----------------------- #
+# run the assessment now and start the LLM in the background
 if settings.analyze:
     biomarkers = collect_biomarkers()
     demographics = settings.demographics
@@ -107,13 +96,11 @@ if settings.analyze:
             assessment = pipeline.assess(demographics, biomarkers, k=settings.k)
         st.session_state["assessment"] = assessment
         st.session_state["recs"] = None
-        # Kick off the LLM in a background thread; the page renders without waiting.
         st.session_state["gen_future"] = _executor().submit(
             pipeline.generate, settings.provider, settings.model or None,
             demographics, assessment, settings.recheck)
 
 
-# --- recommendations (background-filled) ----------------------------------- #
 def _render_recs_content(recs) -> None:
     if recs.error:
         st.warning(recs.error)
@@ -131,8 +118,7 @@ def _render_recs_content(recs) -> None:
 
 @st.fragment(run_every=2)
 def _poll_recs() -> None:
-    """Self-refreshing island: shows a working state, swaps in the report when the
-    background thread finishes, then triggers one full rerun to settle the page."""
+    """Check on the background job every 2s and rerun the page once it's finished."""
     fut = st.session_state.get("gen_future")
     if fut is None:
         return
@@ -155,7 +141,6 @@ def _render_recommendations() -> None:
         _md(C.callout("Recommendations generate automatically after you analyse.", "info"))
 
 
-# --- export + evidence ----------------------------------------------------- #
 def _render_export(assessment) -> None:
     recs = st.session_state.get("recs")
     report = recs.report if recs else None
@@ -174,7 +159,6 @@ def _render_export(assessment) -> None:
                      icon="📖", use_container_width=True)
 
 
-# --- results --------------------------------------------------------------- #
 def render_results(assessment) -> None:
     fused = assessment.fused
     rule_result = assessment.rule_result

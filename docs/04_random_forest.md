@@ -1,61 +1,59 @@
-# Phase 4 — Random Forest Risk Model
+# Phase 4: Random Forest risk model
 
-**Author:** Bhavesh Bhargava — MSc Advanced Data Science
-**Status:** Implemented (`src/app/ml/`), trained & evaluated on the Phase-2 dataset.
-**Model:** `RandomForestClassifier` (scikit-learn), saved with joblib.
+**Author:** Bhavesh Bhargava, MSc Advanced Data Science
+**Code:** `src/app/ml/`, trained and evaluated on the Phase 2 dataset
+**Model:** scikit-learn `RandomForestClassifier`, saved with joblib
 
-> **Goal.** Identify clinically significant *interaction* patterns among blood
-> biomarkers — cases where individual markers look normal/borderline but their
-> combination indicates elevated risk. The probabilistic complement to the
-> deterministic rule engine in the five-stage contract.
+The aim was to find combinations of blood results that point to higher risk even
+when each result looks normal or borderline by itself. The model is the
+probabilistic counterpart to the rule engine.
 
 ---
 
-## 1. Approved design decisions
+## 1. Design decisions
 
-| Decision | Choice | Why |
+| Decision | Choice | Reason |
 |---|---|---|
-| Model | RandomForestClassifier | Robust on tabular data, captures interactions natively, natively explainable. |
-| Imbalance | `class_weight="balanced"` | Reweights loss by inverse frequency; no synthetic data (defensible). |
-| Tuning | GridSearchCV (focused grid) | Exhaustive, reproducible, easy to justify. |
-| CV | StratifiedKFold(5) | Preserves class proportions per fold. |
-| Selection metric | macro-F1 | Weights all 3 classes equally — right for imbalance + the clinical goal. |
-| Scaling | none (unscaled) | Trees are scale-invariant. |
-| Features | 27 — **clinical-only** (biomarkers + age + sex + engineered) | A blood report doesn't carry socio-demographics, and they aren't clinically actionable, so the model must not depend on them. No BP/BMI/waist either (blood-report scope). |
+| Model | RandomForestClassifier | Works well on tabular data, picks up interactions between features, and can be explained. |
+| Class imbalance | `class_weight="balanced"` | Weights classes by inverse frequency without creating synthetic data. |
+| Tuning | GridSearchCV over a small grid | Exhaustive and reproducible. |
+| Cross-validation | StratifiedKFold(5) | Keeps the class proportions in every fold. |
+| Selection metric | macro-F1 | Gives all three classes equal weight, which suits imbalanced classes. |
+| Scaling | none | Trees don't need scaled inputs. |
+| Features | 27, **clinical only** (biomarkers, age, sex and engineered features) | A blood report doesn't include social or demographic details, so the model shouldn't depend on them. Blood pressure, BMI and waist aren't used either. |
 
 **Best hyperparameters (CV):** `max_depth=20, max_features=0.5,
-min_samples_leaf=1, n_estimators=500` — CV macro-F1 **0.868**.
+min_samples_leaf=1, n_estimators=500`, with a CV macro-F1 of **0.868**.
 
 ---
 
-## 2. Feature set (27) — clinical-only
+## 2. Features (27)
 
-Blood biomarkers (actionable, incl. imputed fasting labs), **`age`**, one-hot
-**`sex`**, and blood-derived engineered features (`tc_hdl_ratio`, `tg_hdl_ratio`,
-`tyg_index`, `age_band`). Flag-only electrolytes/WBC/platelets and Vitamin D are
-**excluded** (per Phase 2/3).
+The actionable blood biomarkers (including the imputed fasting tests), **`age`**,
+one-hot **`sex`**, and features derived from the bloods (`tc_hdl_ratio`,
+`tg_hdl_ratio`, `tyg_index`, `age_band`). The flag-only markers (electrolytes,
+WBC, platelets) and vitamin D **aren't used** (see Phases 2 and 3).
 
-**Socio-demographic inputs removed.** Ethnicity, income-to-poverty ratio, and
-education (`eth_*`, `pir`, `educ_code`) were dropped: a blood report doesn't carry
-them and they aren't clinically actionable. Retraining without them left every
-headline metric essentially unchanged (accuracy 0.890→0.889, macro-F1 0.868→0.867,
-novelty detection 72.5%→72.2%) — direct evidence they contributed no useful signal.
-The model is now defensibly a function of the blood panel + age + sex only. The
-Random Forest captures biomarker interactions natively; the explicit ratios give it
-those interactions in low-variance form.
+**No social or demographic inputs.** Ethnicity, income-to-poverty ratio and
+education (`eth_*`, `pir`, `educ_code`) were removed because a blood report
+doesn't include them and lifestyle can't change them. Retraining without them
+left the headline metrics practically unchanged (accuracy 0.890 → 0.889,
+macro-F1 0.868 → 0.867), so they weren't adding anything. The Random Forest can
+combine biomarkers by itself, and the ratio features give it the most useful
+combinations directly.
 
 ---
 
-## 3. Results (held-out test set, n = 3,862)
+## 3. Test set results (n = 3,862)
 
 | Metric | Value |
 |---|---|
 | Accuracy | **0.889** |
 | Macro-F1 | **0.867** |
 | Weighted-F1 | 0.891 |
-| ROC-AUC (macro, OVR) | **0.973** |
+| ROC-AUC (macro, one-vs-rest) | **0.973** |
 
-**Per-class:**
+**By class:**
 
 | Class | Precision | Recall | F1 | Support |
 |---|---|---|---|---|
@@ -63,7 +61,7 @@ those interactions in low-variance form.
 | borderline | 0.888 | 0.912 | 0.900 | 2,094 |
 | serious | 0.983 | 0.848 | 0.911 | 1,311 |
 
-**Confusion matrix** (rows = true, cols = predicted):
+**Confusion matrix** (rows are the true class, columns the prediction):
 
 | | → normal | → borderline | → serious |
 |---|---|---|---|
@@ -71,91 +69,123 @@ those interactions in low-variance form.
 | **borderline** | 165 | 1,910 | 19 |
 | **serious** | 5 | 194 | 1,112 |
 
-**Safety-critical error is very low:** only **5 / 1,311 (0.4%)** truly serious
-cases were predicted normal. Most error is one-step and conservative
-(serious→borderline, normal→borderline).
+Only **5 of the 1,311 serious cases (0.4%)** were predicted normal. Almost all
+errors are one class away; the largest groups are serious predicted as
+borderline (194) and borderline predicted as normal (165).
 
 ---
 
-## 4. Honest interpretation (read before quoting the headline numbers)
+## 4. What the headline numbers mean
 
-The 3-class label is, for most records, a near-deterministic function of the
-biomarker thresholds (Layer-1 rules), and the RF sees those same biomarkers as
-features. So a large part of the 0.89 accuracy reflects the RF **re-learning the
-rule engine** — a robust, smoothed surrogate, but *not* independent evidence of
-predictive power. The headline metrics should be reported as *"the RF reproduces
-the guideline-based severity with high fidelity,"* not as clinical risk prediction.
+For most records the label is close to a fixed function of the Layer 1
+thresholds, and the model sees the same biomarkers those thresholds use. The
+model agrees with the rule engine on **93.5%** of test records, and **97.4%** of
+its serious predictions were already serious by the rules. Most of the 0.89
+accuracy is therefore the forest learning the rule engine back. That shows it
+reproduces the guideline-based severity closely, but it isn't evidence that it
+predicts clinical risk on its own.
 
-**The genuine ML contribution is measured on the Layer-2 novelty slice** (§5).
+The test that could show that is the novelty slice (§5).
 
 ---
 
-## 5. Novelty-slice evaluation (the study's core question)
+## 5. Novelty slice
 
-The **Layer-2 novelty slice** = test records whose *individual* biomarkers looked
-normal/borderline but whose diagnosis/medication evidence indicated higher risk
-(`label_upgraded_by_l2`). The RF **never sees** that evidence, so its behaviour
-here measures whether it has learned the hidden *interaction* signal from
-biomarker patterns alone.
+The **novelty slice** is the test records whose blood results looked normal or
+borderline by the rules, but whose diagnosis or medication answers put them
+higher (`label_upgraded_by_l2`). The model never sees those answers, so this
+slice tests whether it can find the hidden risk from the blood results alone.
 
-| Novelty slice (n = 306) | Value |
+There are 306 such records. None of them is normal (true labels: borderline 127,
+serious 179), and the rules never grade any of them as serious, because that's
+what puts them in the slice.
+
+| Predictor | Exact accuracy (95% CI) |
 |---|---|
-| **Hidden-risk detection rate** (predicts non-normal) | **72.2%** |
-| Exact-label accuracy | 18.6% |
-| Predicted distribution | normal 85 · borderline 211 · serious 10 |
+| **Random Forest** | **18.6%** (14.7–23.4) |
+| Always "serious" | 58.5% (52.9–63.9) |
+| Random draw from the training class mix | 42.3% (37.3–47.7) |
+| Always "borderline" | 41.5% (36.1–47.1) |
+| Always "normal" | 0.0% |
 
-**Reading it honestly:** despite these patients' individually unremarkable
-biomarkers, the RF flags *elevated risk* in ~73% of them from biomarker
-combinations alone — evidence it captures clinically meaningful interaction
-patterns that single-threshold rules miss. It **detects** risk far better than it
-**grades** it (exact accuracy only 20%): it tends to predict *borderline* where the
-hidden truth is *serious*. This is the expected, defensible result — the value is
-in surfacing otherwise-missed risk, which is then handled downstream by the rule
-engine + clinician signposting.
+**The model does worse than predicting "serious" for everyone.** Against that
+baseline it gets 47 records right that the baseline gets wrong, and 169 wrong
+that the baseline gets right (exact McNemar p = 2.4 × 10⁻¹⁷). It predicts normal
+for 85 records, borderline for 211 and serious for only 10.
+
+An earlier version of this document gave a **"risk detected" rate of 72.2%** (any
+prediction other than normal) as the main result. That rate means nothing on this
+slice: it has no normal records, so predicting any single non-normal class for
+everyone scores 100%.
+
+**Is it because medication brings the blood results back to normal?** The slice
+was split by medication:
+
+| Group | n | Model accuracy | Best constant prediction |
+|---|---|---|---|
+| On medication that lowers a measured marker (lipids, glucose) | 184 | 17.4% (12.6–23.5) | 76.6% (always serious) |
+| On blood pressure medication only | 70 | 27.1% (18.1–38.5) | 74.3% (always borderline) |
+| No medication | 52 | 11.5% (5.4–23.0) | 61.5% (always borderline) |
+
+People on no medication aren't graded any better than people whose medication
+lowers the measured markers (11.5% against 17.4%), and accuracy for the
+marker-lowering group doesn't differ significantly from everyone else in the
+slice (Fisher's exact p = 0.55). Treatment masking the blood results doesn't
+explain the result.
+
+The simpler explanation is how the slice is built. Layer 1 never calls these
+records serious, the model has closely learned Layer 1, and the labels that make
+these records different come from questionnaire answers the model can't see. It
+predicts serious for only 10 of the 179 records that are truly serious.
+
+Phase 9 also looks at what this means once the model is fused with the rules in
+the app.
 
 ---
 
 ## 6. Explainability
 
-- **Gini importance + SHAP (TreeExplainer)** agree on the drivers. Top features
-  (mean |SHAP|): `hba1c_pct`, `total_chol_mgdl`, `fasting_glucose_mgdl`,
-  `hdl_mgdl`, `age`, `age_band`, `tg_hdl_ratio`, `tc_hdl_ratio`, `ldl_mgdl`,
-  `triglycerides_mgdl`, then CBC indices (`mch`, `rdw`).
-- Cardiometabolic markers dominate (clinically sensible); the engineered ratios
-  (`tg_hdl`, `tc_hdl`) and TyG contribute, confirming interaction signal is used.
-- Artefacts in `reports/phase4/`: `confusion_matrix.png`, `roc_curves.png`,
+- **Gini importance and SHAP (TreeExplainer)** agree on the most important
+  features. By mean |SHAP|: `hba1c_pct`, `total_chol_mgdl`,
+  `fasting_glucose_mgdl`, `age`, `hdl_mgdl`, `tg_hdl_ratio`, `tc_hdl_ratio`,
+  `age_band`, `ldl_mgdl`, then blood count markers such as `mch`.
+- The cardiometabolic markers matter most, which makes clinical sense, and the
+  ratio features and TyG index contribute as well. These are the same markers the
+  Layer 1 thresholds use, which fits with §4.
+- Outputs in `reports/phase4/`: `confusion_matrix.png`, `roc_curves.png`,
   `feature_importance.{png,csv}`, `shap_summary_{normal,borderline,serious}.png`,
-  `classification_report.txt`, `metrics.json`.
+  `classification_report.txt`, `metrics.json`. The novelty-slice baselines and
+  plot (`novelty_baselines.png`) are in `reports/phase9/`.
 
 ---
 
-## 7. Module map (`src/app/ml/`)
+## 7. Modules (`src/app/ml/`)
 
-| File | Responsibility |
+| File | What it does |
 |---|---|
-| `data.py` | Load Phase-2 matrices, encode labels, expose the novelty mask |
-| `train.py` | GridSearchCV + StratifiedKFold; save model + metadata (joblib) |
-| `evaluate.py` | All metrics, confusion matrix, ROC, novelty-slice eval, plots |
-| `explain.py` | Gini + SHAP importance and per-class beeswarms |
-| `predict.py` | Inference wrapper (`RiskModel`) for the API/fusion layer |
-| `registry/` | `rf_model.joblib` + `rf_model_metadata.json` |
-| `scripts/train_model.py` | Entrypoint: train → evaluate → explain |
-| `tests/test_ml.py` | Synthetic end-to-end smoke test |
+| `data.py` | Loads the Phase 2 matrices, encodes labels, provides the novelty mask and medication groups |
+| `train.py` | GridSearchCV with StratifiedKFold; saves the model and its metadata (joblib) |
+| `evaluate.py` | Metrics, confusion matrix, ROC curves, novelty-slice baselines and medication groups, agreement with the rules, fusion analysis, plots |
+| `explain.py` | Gini and SHAP importance, SHAP plots per class |
+| `predict.py` | `RiskModel`, used by the API and fusion to make predictions |
+| `registry/` | `rf_model.joblib` and `rf_model_metadata.json` |
+| `scripts/train_model.py` | Train, evaluate and explain in one go |
+| `tests/test_ml.py` | End-to-end smoke test on synthetic data |
 
-**Run:** `python scripts/train_model.py` (or `--quick`).
+**Run:** `python scripts/train_model.py` (or add `--quick` for a small grid).
 
 ---
 
 ## 8. Limitations
 
-1. **Label–feature coupling** inflates headline metrics (§4); the novelty slice is
-   the fair test.
-2. **Novelty slice grading is weak** (exact acc 20%) — the RF detects hidden risk
-   better than it grades it.
-3. **US NHANES training** with UK-guideline labels — the RF is a *risk-pattern*
-   detector, never diagnostic (thresholds owned by the rule engine).
-4. **Unweighted training** (survey weights not applied) — documented Phase-2 choice.
+1. **Labels and features overlap.** The label is mostly built from the same
+   biomarkers the model sees, which inflates the headline metrics (§4).
+2. **The model doesn't find the hidden risk.** On the novelty slice it's worse
+   than a constant prediction (§5).
+3. **US training data with UK-guideline labels.** The model picks up risk
+   patterns and is never used to diagnose; the rule engine owns the thresholds.
+4. **No survey weights in training**, as decided in Phase 2.
 
-**Phase 4 exit criteria met.** The trained model and its metadata sidecar are
-committed to `src/app/ml/registry/`, so the application runs without retraining;
-Phase 9 re-evaluates the same artefact into `reports/phase9/`.
+The trained model and its metadata are committed to `src/app/ml/registry/`, so
+the app runs without retraining. Phase 9 evaluates the same model and writes the
+results to `reports/phase9/`.

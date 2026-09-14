@@ -1,41 +1,35 @@
-# ==========================================================================
-# clinical_rules.yaml — configurable clinical rule set (Phase 3)
-# SINGLE SOURCE OF TRUTH for biomarker classification. Used by both the
-# rule engine (inference) and Phase-2 Layer-1 labelling — they cannot drift.
+# Clinical rules for classifying each biomarker.
 #
-# Add a new biomarker by adding a block here. NO Python changes required.
+# Both the rule engine and the Layer 1 training labels read this file, so they
+# always agree. A new biomarker only needs a new block here.
 #
-# Every biomarker is `category: blood` — an analyte from the blood test report.
-# (Non-blood inputs such as BP/BMI/waist are intentionally out of scope: this is
-#  a blood-test-report system. Weight & BP are signposted to the GP instead.)
+# Everything here is a blood test (category: blood). Blood pressure, BMI and
+# waist aren't covered.
 #
-# Per-biomarker `bands` are evaluated in order; a value falls in the first band
-# whose [min, max) contains it (min inclusive, max exclusive; omit min/max for
-# open-ended -inf/+inf). min/max may be a scalar OR a sex map {male:.., female:..}.
+# Bands are checked in order and a value goes in the first band where
+# min <= value < max. Leave out min or max for an open end. Either can be a
+# number or a per-sex map {male: .., female: ..}.
 #
-# Each band declares:
-#   status        one of: normal | borderline | low | high | severe
-#   severity      fusion contribution: normal | borderline | serious
-#   direction     low (below range) | high (above range) | in_range   (optional)
-#   urgent        optional; defaults to true when status == severe
-#   guideline     {source, code}   provenance for the interpretation
-#   interpretation  template; placeholders {name} {value} {unit}
-# ==========================================================================
+# Band fields:
+#   status          normal | borderline | low | high | severe
+#   severity        normal | borderline | serious (used for the overall result)
+#   direction       low | high | in_range (optional)
+#   urgent          optional, defaults to true when status is severe
+#   guideline       {source, code} the interpretation is based on
+#   interpretation  text with {name}, {value} and {unit} placeholders
 
 meta:
   ruleset_version: "1.1"
   severity_order: [normal, borderline, serious]
   status_vocabulary: [normal, low, high, borderline, severe]
 
-  # --- Label aggregation policy (weighted-core) --------------------------- #
-  # Overall severity across the actionable panel:
-  #   * any actionable SERIOUS marker            -> serious
-  #   * a CORE marker at borderline              -> borderline on its own
-  #   * SECONDARY markers                        -> borderline only when
-  #     >= secondary_borderline_min are mildly abnormal (prevents isolated
-  #     incidental findings, e.g. one raised RDW or vitamin-D insufficiency,
-  #     from flagging otherwise-healthy people).
-  # Core = cardiometabolic markers + measurements (strong lifestyle signal).
+  # How the overall severity is worked out from the actionable markers:
+  #   - any serious marker makes it serious
+  #   - one borderline core marker makes it borderline
+  #   - secondary markers only make it borderline when at least
+  #     secondary_borderline_min of them are borderline, so a single raised RDW
+  #     or low vitamin D doesn't flag an otherwise healthy person
+  # Core markers are the cardiometabolic ones.
   secondary_borderline_min: 2
   label_secondary_markers:
     [hemoglobin, hematocrit, rbc, mcv, mch, mchc, rdw,

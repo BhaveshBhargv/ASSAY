@@ -1,16 +1,12 @@
-"""
-theme.py — the "Assay" design system: palette tokens + injected CSS.
+"""Colours and CSS for the dashboard.
 
-One place owns the visual identity. `PALETTE` / `SEVERITY` are shared with the
-Plotly charts so the whole app stays on-brand. `inject()` loads the fonts and the
-component styles (cards, chips, the signature reference-range strip, evidence
-cards, stat tiles, hero).
+PALETTE and SEVERITY are also used by the Plotly charts. inject() adds the
+fonts and the styles for the dashboard components.
 """
 from __future__ import annotations
 
 import streamlit as st
 
-# --- tokens (single source of colour truth) -------------------------------- #
 PALETTE = {
     "ink": "#10202E",
     "ink2": "#3C4E5A",
@@ -23,7 +19,6 @@ PALETTE = {
     "teal_tint": "#E3F0F1",
 }
 
-# Severity is the domain's own three-colour language (+ urgent).
 SEVERITY = {
     "normal": "#1F9D74",
     "borderline": "#C8871B",
@@ -31,7 +26,7 @@ SEVERITY = {
     "urgent": "#B0323F",
 }
 
-# Per-status accents used by chips / strips (maps the 5 clinical statuses).
+# colour for each of the five statuses (chips and range strips)
 STATUS_COLOR = {
     "normal": SEVERITY["normal"],
     "borderline": SEVERITY["borderline"],
@@ -276,5 +271,5 @@ hr { border-color:var(--line); }
 
 
 def inject() -> None:
-    """Inject fonts + component styles. Call once, right after set_page_config."""
+    """Add the fonts and styles. Call once, after set_page_config."""
     st.markdown(_CSS, unsafe_allow_html=True)

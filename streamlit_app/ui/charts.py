@@ -1,11 +1,6 @@
-"""
-charts.py — interactive Plotly figures, themed to the Assay palette.
+"""Plotly charts in the dashboard colours.
 
-    deviation_chart(rule_result)  — how far each flagged marker sits outside its range
-    rf_probability_chart(fused)   — the Random Forest's class probabilities
-
-Both return a Figure (or None when there's nothing to show) so the caller can
-decide whether to render a section.
+Both functions return None when there's nothing to plot.
 """
 from __future__ import annotations
 
@@ -23,7 +18,7 @@ _LAYOUT = dict(
 
 
 def _deviation(value, low, high):
-    """Signed, range-normalised distance outside the reference band (0 = in range)."""
+    """Distance outside the reference range in multiples of its width (0 if inside)."""
     if not isinstance(low, (int, float)) or not isinstance(high, (int, float)):
         return 0.0
     span = max(high - low, 1e-6)

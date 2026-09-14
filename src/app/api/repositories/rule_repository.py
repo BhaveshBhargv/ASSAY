@@ -1,4 +1,4 @@
-"""rule_repository.py — owns the clinical rule engine and ruleset."""
+"""Loads the rule set and the rule engine."""
 from __future__ import annotations
 
 import logging

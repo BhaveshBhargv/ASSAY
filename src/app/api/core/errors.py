@@ -1,9 +1,7 @@
-"""
-errors.py — typed application errors + JSON exception handlers.
+"""API error types and the handlers that turn them into JSON responses.
 
-Every error leaves the API in the same envelope:
-    {"error": {"type": "...", "message": "...", "detail": ...}, "request_id": "..."}
-so clients can branch on `type` and correlate with server logs via `request_id`.
+Every error response has the same shape:
+    {"error": {"type": ..., "message": ..., "detail": ...}, "request_id": ...}
 """
 from __future__ import annotations
 
@@ -21,7 +19,7 @@ log = logging.getLogger("assay.api")
 
 
 class AppError(Exception):
-    """Base for expected, client-facing errors."""
+    """Base class for errors that are reported back to the client."""
     status_code = status.HTTP_400_BAD_REQUEST
     error_type = "app_error"
 
@@ -47,13 +45,13 @@ class PayloadTooLargeError(AppError):
 
 
 class ModelUnavailableError(AppError):
-    """A required artefact (RF model, index) isn't loaded."""
+    """The model or the index isn't loaded."""
     status_code = status.HTTP_503_SERVICE_UNAVAILABLE
     error_type = "model_unavailable"
 
 
 class LLMUnavailableError(AppError):
-    """The language model provider could not be reached or returned garbage."""
+    """The LLM provider couldn't be reached or returned something unusable."""
     status_code = status.HTTP_502_BAD_GATEWAY
     error_type = "llm_unavailable"
 

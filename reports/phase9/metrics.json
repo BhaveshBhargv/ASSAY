@@ -61,12 +61,247 @@
   "novelty_slice": {
     "n": 306,
     "description": "records upgraded by Layer-2 (bloods normal/borderline, diagnosis/medication indicated higher risk)",
-    "risk_detected_rate": 0.7222222222222222,
-    "exact_label_accuracy": 0.18627450980392157,
+    "true_class_distribution": {
+      "normal": 0,
+      "borderline": 127,
+      "serious": 179
+    },
+    "risk_detected_rate": 0.7222,
+    "exact_label_accuracy": 0.1863,
     "predicted_class_distribution": {
       "normal": 85,
       "borderline": 211,
       "serious": 10
+    },
+    "model": {
+      "exact_accuracy": 0.1863,
+      "exact_accuracy_ci95": [
+        0.1466,
+        0.2337
+      ],
+      "risk_detected_rate": 0.7222,
+      "predicted_distribution": {
+        "normal": 85,
+        "borderline": 211,
+        "serious": 10
+      }
+    },
+    "baselines": {
+      "constant_normal": {
+        "exact_accuracy": 0.0,
+        "exact_accuracy_ci95": [
+          0.0,
+          0.0124
+        ],
+        "risk_detected_rate": 0.0,
+        "predicted_distribution": {
+          "normal": 306,
+          "borderline": 0,
+          "serious": 0
+        }
+      },
+      "constant_borderline": {
+        "exact_accuracy": 0.415,
+        "exact_accuracy_ci95": [
+          0.3612,
+          0.471
+        ],
+        "risk_detected_rate": 1.0,
+        "predicted_distribution": {
+          "normal": 0,
+          "borderline": 306,
+          "serious": 0
+        }
+      },
+      "constant_serious": {
+        "exact_accuracy": 0.585,
+        "exact_accuracy_ci95": [
+          0.529,
+          0.6388
+        ],
+        "risk_detected_rate": 1.0,
+        "predicted_distribution": {
+          "normal": 0,
+          "borderline": 0,
+          "serious": 306
+        }
+      },
+      "stratified_random": {
+        "exact_accuracy": 0.4227,
+        "exact_accuracy_ci95": [
+          0.3725,
+          0.4771
+        ],
+        "note": "2000 draws from the training class prior"
+      }
+    },
+    "vs_best_constant": {
+      "baseline": "constant_serious",
+      "baseline_exact_accuracy": 0.585,
+      "model_correct_baseline_wrong": 47,
+      "model_wrong_baseline_correct": 169,
+      "mcnemar_exact_p": 2.373e-17,
+      "model_beats_baseline": false
+    },
+    "metric_caveat": "risk_detected_rate is degenerate on this slice: it contains no true 'normal' records by construction, so any constant non-normal predictor scores 1.0. Compare exact_accuracy against `baselines`.",
+    "strata": {
+      "analyte_lowering_rx": {
+        "n": 184,
+        "model_exact_accuracy": 0.1739,
+        "model_exact_accuracy_ci95": [
+          0.126,
+          0.2352
+        ],
+        "best_constant": "serious",
+        "best_constant_exact_accuracy": 0.7663,
+        "best_constant_ci95": [
+          0.7001,
+          0.8216
+        ],
+        "gap_vs_best_constant": -0.5924,
+        "model_called_normal": 21,
+        "true_distribution": {
+          "normal": 0,
+          "borderline": 43,
+          "serious": 141
+        },
+        "bloods_read_normal_rate": 0.2935
+      },
+      "bp_rx_only_control": {
+        "n": 70,
+        "model_exact_accuracy": 0.2714,
+        "model_exact_accuracy_ci95": [
+          0.1812,
+          0.3854
+        ],
+        "best_constant": "borderline",
+        "best_constant_exact_accuracy": 0.7429,
+        "best_constant_ci95": [
+          0.6297,
+          0.8307
+        ],
+        "gap_vs_best_constant": -0.4714,
+        "model_called_normal": 33,
+        "true_distribution": {
+          "normal": 0,
+          "borderline": 52,
+          "serious": 18
+        },
+        "bloods_read_normal_rate": 0.7714
+      },
+      "no_medication": {
+        "n": 52,
+        "model_exact_accuracy": 0.1154,
+        "model_exact_accuracy_ci95": [
+          0.054,
+          0.2297
+        ],
+        "best_constant": "borderline",
+        "best_constant_exact_accuracy": 0.6154,
+        "best_constant_ci95": [
+          0.4796,
+          0.7353
+        ],
+        "gap_vs_best_constant": -0.5,
+        "model_called_normal": 31,
+        "true_distribution": {
+          "normal": 0,
+          "borderline": 32,
+          "serious": 20
+        },
+        "bloods_read_normal_rate": 0.6923
+      },
+      "independence_test": {
+        "contingency_correct_by_stratum": [
+          [
+            32,
+            152
+          ],
+          [
+            25,
+            97
+          ]
+        ],
+        "fisher_exact_p": 0.5494,
+        "accuracy_differs_by_stratum": false
+      },
+      "verdict": {
+        "hypothesis": "medication normalises the measured analytes, erasing the signal the model must recover",
+        "unmedicated_minus_medicated": -0.0585,
+        "supported": false,
+        "reading": "Unmedicated records are NOT recovered more accurately, so treatment-induced normalisation does not explain the failure. See `rule_agreement` for the structural explanation that does."
+      }
     }
+  },
+  "rule_agreement": {
+    "agreement_with_rule_engine": 0.9353,
+    "agreement_on_novelty_slice": 0.7745,
+    "accuracy_vs_true_label": 0.8887,
+    "counts": {
+      "rule_serious": 1132,
+      "model_serious": 1131,
+      "true_serious": 1311
+    },
+    "novelty_slice_counts": {
+      "rule_serious": 0,
+      "model_serious": 10,
+      "true_serious": 179
+    },
+    "model_serious_already_flagged_by_rules": 0.9744,
+    "model_serious_beyond_rules": 29,
+    "interpretation": "Agreement close to 1.0 means the forest is largely a re-implementation of the rule engine, so the headline accuracy/ROC-AUC measure re-learned determinism rather than clinical inference. Layer-1 is never 'serious' on the novelty slice by construction, which bounds what that experiment could have shown regardless of model quality."
+  },
+  "fusion_analysis": {
+    "configurations": {
+      "rule_engine_only": {
+        "accuracy": 0.9208,
+        "accuracy_ci95": [
+          0.9118,
+          0.9289
+        ]
+      },
+      "model_only": {
+        "accuracy": 0.8887,
+        "accuracy_ci95": [
+          0.8783,
+          0.8982
+        ]
+      },
+      "fused_max_rule_model": {
+        "accuracy": 0.9184,
+        "accuracy_ci95": [
+          0.9094,
+          0.9267
+        ]
+      }
+    },
+    "escalations": {
+      "total": 135,
+      "false_on_non_novelty": 66,
+      "warranted_on_novelty": 69,
+      "warranted_reached_true_label": 57,
+      "warranted_still_too_low": 12,
+      "warranted_overshot": 0
+    },
+    "false_escalation_rate": {
+      "rate": 0.0186,
+      "ci95": [
+        0.0146,
+        0.0235
+      ],
+      "n_at_risk": 3556,
+      "by_severity": {
+        "normal_to_borderline": 47,
+        "borderline_to_serious": 19
+      }
+    },
+    "net_effect_vs_rules_alone": {
+      "records_fixed": 57,
+      "records_broken": 66,
+      "net": -9,
+      "mcnemar_exact_p": 0.4709,
+      "model_improves_system": false
+    },
+    "interpretation": "Fusion can only escalate, so the false-escalation rate on the non-novelty population is the only harm this architecture can cause. Compare `records_fixed` against `records_broken` to judge whether the model earns its place in the pipeline at all."
   }
 }

@@ -1,10 +1,4 @@
-"""
-load.py — read NHANES .XPT files into pandas and apply canonical renaming.
-
-Each .XPT is a SAS transport file; pandas reads it natively (no extra driver).
-String columns come back as bytes and are decoded. Survey-weight columns are
-harmonised to a single 'wtmec' name across cycles.
-"""
+"""Read NHANES .XPT files into pandas and rename the columns we use."""
 from __future__ import annotations
 
 import logging
@@ -18,9 +12,8 @@ log = logging.getLogger(__name__)
 
 
 def read_xpt(path: Path) -> pd.DataFrame:
-    """Read a single .XPT file, decoding byte strings to str."""
+    """Read one .XPT file, decoding any byte strings."""
     df = pd.read_sas(path, format="xport")
-    # Decode object (bytes) columns.
     for col in df.select_dtypes(include="object").columns:
         df[col] = df[col].apply(
             lambda v: v.decode("utf-8", "ignore").strip() if isinstance(v, bytes) else v
@@ -29,9 +22,10 @@ def read_xpt(path: Path) -> pd.DataFrame:
 
 
 def load_component(path: Path) -> pd.DataFrame | None:
-    """
-    Load a component file, keep SEQN + any recognised canonical variables,
-    and harmonise the survey-weight column. Returns None if the file is absent.
+    """Load a component file, keeping SEQN and the columns we know about.
+
+    The survey weight column is renamed to wtmec. Returns None if the file
+    doesn't exist or has no SEQN.
     """
     if not path.exists():
         return None
@@ -49,7 +43,7 @@ def load_component(path: Path) -> pd.DataFrame | None:
             keep.append(raw)
             rename[raw] = canon
 
-    # Harmonise survey weight (name differs by cycle).
+    # the weight column has a different name in each cycle
     for wvar in WEIGHT_VARS:
         if wvar in df.columns:
             keep.append(wvar)

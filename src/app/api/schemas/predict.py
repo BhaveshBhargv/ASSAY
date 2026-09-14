@@ -1,4 +1,4 @@
-"""predict.py — /predict request/response (rules + Random Forest + fusion)."""
+"""Request and response models for /predict."""
 from __future__ import annotations
 
 from pydantic import BaseModel, field_validator

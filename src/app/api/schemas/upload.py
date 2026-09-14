@@ -1,4 +1,4 @@
-"""upload.py — /upload response (parsed blood report for review)."""
+"""Response model for /upload."""
 from __future__ import annotations
 
 from pydantic import BaseModel, Field

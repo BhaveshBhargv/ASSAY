@@ -1,10 +1,8 @@
-"""
-test_api.py — Phase 7 API tests (FastAPI TestClient, offline).
+"""API tests using FastAPI's TestClient.
 
-The client's context manager runs the lifespan (loads the real rule engine, RF,
-and FAISS index). The LLM step is expected to be unavailable in CI, so /recommend
-is asserted to fail *gracefully* with a typed 502 — that is the error-handling
-contract, not a bug.
+Using the client as a context manager runs the lifespan, so the real rule
+engine, model and index are loaded. There's normally no LLM running during
+tests, so /recommend is expected to return a 502 rather than a server error.
 
 Run:  python tests/test_api.py
 """
@@ -49,14 +47,14 @@ def test_predict_ok():
 
 def test_predict_validation_error_envelope():
     with TestClient(app) as c:
-        # unknown biomarker code -> 422 with typed error envelope
+        # unknown biomarker code
         r = c.post("/predict", json={"demographics": DEMO, "biomarkers": {"blood_pressure": 120}})
         assert r.status_code == 422
         body = r.json()
         assert body["error"]["type"] == "validation_error"
         assert "request_id" in body
 
-        # bad demographics (age < 18) -> 422
+        # under 18
         r2 = c.post("/predict", json={"demographics": {"age": 5, "sex": "male"}, "biomarkers": BIO})
         assert r2.status_code == 422
 
@@ -104,7 +102,7 @@ def test_recommend_degrades_gracefully_without_llm():
     with TestClient(app) as c:
         r = c.post("/recommend", json={"demographics": DEMO, "biomarkers": BIO,
                                        "provider": "ollama", "k": 5})
-        # No Ollama in CI → typed 502, not a 500 stack trace.
+        # 502 when no model is running
         assert r.status_code in (200, 502)
         if r.status_code == 502:
             assert r.json()["error"]["type"] == "llm_unavailable"

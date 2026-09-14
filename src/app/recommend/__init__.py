@@ -1,13 +1,7 @@
-"""
-recommend — Phase 6 LLM recommendation engine.
+"""Generates grounded lifestyle recommendations from an assessment.
 
-Turns a fused clinical assessment (rule engine + Random Forest) plus retrieved
-guideline evidence into a grounded, non-diagnostic, patient-friendly lifestyle
-recommendation report.
-
-Public entrypoint:
     from app.recommend import RecommendationEngine
-    engine = RecommendationEngine.build()          # local Ollama by default
+    engine = RecommendationEngine.build()
     bundle = engine.recommend(demographics, biomarkers)
     print(bundle.render())
 """
